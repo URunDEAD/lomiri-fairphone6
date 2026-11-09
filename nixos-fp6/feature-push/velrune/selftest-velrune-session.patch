@@ -1,0 +1,26 @@
+--- a/src/base.rs
++++ b/src/base.rs
+@@ -27,7 +27,23 @@
+     "gps",
+     "fingerprint",
+ ];
++/// The Velrune session replaces Lomiri on the panel (velrune-session.service, which
++/// conflicts with display-manager.service). Lomiri's own processes are then absent
++/// by design, so their checks are skipped instead of failed.
++fn velrune_session_active() -> bool {
++    matches!(
++        capture("systemctl", &["is-active", "velrune-session.service"]),
++        Ok(state) if state.trim() == "active"
++    )
++}
+ pub fn check(id: &str) -> Check {
++    if matches!(id, "display-manager" | "lomiri" | "maliit") && velrune_session_active() {
++        return Check::new(
++            id,
++            Status::Skip,
++            "Lomiri is not the running session (velrune-session is active)",
++        );
++    }
+     let result = match id {
+         "release" => match fs::read("/etc/fp6-release") {
+             Ok(v) if !v.is_empty() => (Status::Pass, "Release metadata is readable".into()),

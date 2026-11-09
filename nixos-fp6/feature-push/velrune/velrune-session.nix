@@ -19,7 +19,7 @@
 #    and leaves a marker. Nothing else depends on the session, so SSH,
 #    NetBird, oFono, imsd and PipeWire keep running whatever it does.
 #  * Power key: the Shell owns it (0.1.25 blanks and wakes the panel). logind
-#    ignores a short press and reboots on a 5 s hold; fp6-lomiri-powerd, which also
+#    ignores a short press and reboots on a 5 s hold (into whatever boot_b pins); fp6-lomiri-powerd, which also
 #    reads KEY_POWER and drives the backlight, now runs only with Lomiri.
 #  * Apps: format-1 manifests in ./apps (hand list: the Shell has no .desktop
 #    discovery yet, shell-plan T14) run the binaries on the user's Nix profile.
@@ -33,6 +33,7 @@
 #    without a graphical agent, packet data kept on, plymouth-quit at boot, and
 #    the fp6.trial=1 revert timer for RAM boots.
 #  * lomiri-kdeconnect builds without its tests: their PEM fixtures are gitignored.
+#  * fp6-selftest skips its Lomiri-only checks while the Velrune session runs.
 #  * Desktop speed-ups and live-test fixes: `user` is a trusted Nix user (direct
 #    `nix copy --to ssh-ng://user@phone`); VELRUNE_APPLICATION_MAP for links;
 #    Wi-Fi powersave forced off.
@@ -63,8 +64,6 @@ let
     SLINT_SCALE_FACTOR = "1.5";
     GRID_UNIT_PX = "8";
     VELRUNE_APPLICATION_MAP = applicationMap;
-    XDG_SESSION_TYPE = "wayland";
-    XDG_SESSION_DESKTOP = "velrune";
     XDG_CURRENT_DESKTOP = "Velrune";
     DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString uid}/bus";
   };
@@ -111,7 +110,16 @@ in
       StartLimitBurst = 4;
       OnFailure = [ "velrune-session-failed.service" ];
     };
+    # Read by pam_systemd when the session opens, so logind records Type=wayland.
+    # /etc/pam/environment sets no XDG_SESSION_* variable, so Environment= is enough.
+    environment = { XDG_SESSION_TYPE = "wayland"; XDG_SESSION_DESKTOP = "velrune"; };
     serviceConfig = {
+      # Live, after switch-to-configuration test: the foreground VT was still Lomiri's
+      # tty2, logind kept the new tty1 session inactive, and DRM refused the
+      # compositor ("Failed to disable connectors ... Permission denied",
+      # direct_session active=false). Bring tty1 to the foreground first, as root
+      # ("+"), before PAM opens the session. At boot it is already tty1: a no-op.
+      ExecStartPre = "+${pkgs.kbd}/bin/chvt 1";
       ExecStart = launch;
       User = user;
       PAMName = "login";
@@ -150,9 +158,10 @@ in
 
   # ---- Power key -----------------------------------------------------------------
   # Short press: the Shell (0.1.25) turns the screen off and on itself, so logind
-  # must ignore it (the base config already does; forced here). A 5 s hold reboots:
-  # recoverable over the network (boot_b brings back the known-good generation),
-  # unlike a poweroff, and the Shell has no power menu yet. The PMIC's own
+  # must ignore it (the base config already does; forced here). A 5 s hold reboots,
+  # unlike a poweroff still reachable over the network, and the Shell has no power
+  # menu yet. The reboot boots whatever boot_b pins: the Lomiri generation until
+  # boot_b is written with this one (plan step 8), this generation afterwards. The PMIC's own
   # hardware reset on a much longer hold is unaffected.
   services.logind.settings.Login = {
     HandlePowerKey = lib.mkForce "ignore";
@@ -162,7 +171,19 @@ in
   # backlight. Not at boot any more: display-manager pulls it in, and starting
   # velrune-session stops it (Conflicts= above).
   systemd.services.fp6-lomiri-powerd.wantedBy = lib.mkForce [ ];
+  # Its unit changes here; a restart during switch-to-configuration would race the
+  # session's start (Conflicts=) and could leave neither shell on the panel.
+  systemd.services.fp6-lomiri-powerd.restartIfChanged = false;
   systemd.services.display-manager.wants = [ "fp6-lomiri-powerd.service" ];
+
+  # ---- Self-test in the Velrune session -------------------------------------------
+  # fp6-selftest-system (2 min after boot) failed its base "display-manager" check:
+  # Lomiri is deliberately not running. The patch skips the Lomiri-only checks
+  # (display-manager, lomiri, maliit) while velrune-session.service is active.
+  hardware.fairphone6.selftest.package = lib.mkForce
+    ((import ../selftest/default.nix { inherit pkgs; }).overrideAttrs (old: {
+      patches = (old.patches or [ ]) ++ [ ./selftest-velrune-session.patch ];
+    }));
 
   # ---- Build fix for a clean checkout -------------------------------------------
   # lomiri-kdeconnect's unit test include_bytes!() two PEM fixtures that the repo's
@@ -218,8 +239,12 @@ in
   # on the phone (ipv6.method disabled), not here.
 
   # ---- Desktop to phone copies --------------------------------------------------
-  # `nix copy --to ssh-ng://user@<phone>` without root or signatures. `user` is
-  # already in wheel with sudo, so this grants nothing it did not have.
+  # `nix copy --to ssh-ng://user@<phone>` without root or signatures.
+  # This is root-equivalent: a trusted user can import unsigned paths and pass
+  # privileged settings to the daemon. sudo needs a password, so this turns "root
+  # with the password" into "root without it" for every process running as `user`
+  # (the Shell's apps included). Acceptable on this wipeable test phone only:
+  # remove it before the phone holds anything that matters.
   nix.settings.trusted-users = lib.mkAfter [ user ];
 
   # ---- RAM boots only: an image with fp6.trial=1 is never written to boot_b --
