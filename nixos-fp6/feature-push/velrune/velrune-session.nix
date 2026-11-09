@@ -18,6 +18,9 @@
 #    Restart=on-failure with a start limit; past the limit OnFailure only logs
 #    and leaves a marker. Nothing else depends on the session, so SSH,
 #    NetBird, oFono, imsd and PipeWire keep running whatever it does.
+#  * Power key: the Shell owns it (0.1.25 blanks and wakes the panel). logind
+#    ignores a short press and reboots on a 5 s hold; fp6-lomiri-powerd, which also
+#    reads KEY_POWER and drives the backlight, now runs only with Lomiri.
 #  * Apps: format-1 manifests in ./apps (hand list: the Shell has no .desktop
 #    discovery yet, shell-plan T14) run the binaries on the user's Nix profile.
 #    Manifests cannot carry environment variables, so the launcher exports
@@ -29,6 +32,7 @@
 #    AUDIO_USER, polkit rule for the radio group), linger for PipeWire, NetBird
 #    without a graphical agent, packet data kept on, plymouth-quit at boot, and
 #    the fp6.trial=1 revert timer for RAM boots.
+#  * lomiri-kdeconnect builds without its tests: their PEM fixtures are gitignored.
 #  * Desktop speed-ups and live-test fixes: `user` is a trusted Nix user (direct
 #    `nix copy --to ssh-ng://user@phone`); VELRUNE_APPLICATION_MAP for links;
 #    Wi-Fi powersave forced off.
@@ -40,14 +44,15 @@ let
   uid = config.users.users.${user}.uid;
   home = config.users.users.${user}.home;
 
-  # Cross-built Shell 0.1.24 (Shell repo agent/shell-phone b43a887, ci/cross-phone.nix;
-  # drv k89vd4c0...). Its compositor sets logind's LockedHint while the lock screen is
+  # Cross-built Shell 0.1.25 (Shell repo agent/shell-phone 49c9698, ci/cross-phone.nix;
+  # drv 72aly8c7...). Its compositor sets logind's LockedHint while the lock screen is
   # up (--lock-hint auto, on for --backend drm), which needs the logind session that
-  # PAMName=login opens. Its closure is 0.1.22's (on the phone since E2-lite) plus
-  # the package itself. builtins.storePath makes it part of the system closure, so `nix copy` ships it
+  # PAMName=login opens, and it turns the screen off and on with the power key itself.
+  # Its closure is 0.1.22's (on the phone since E2-lite) plus the package itself.
+  # builtins.storePath makes it part of the system closure, so `nix copy` ships it
   # and the phone's GC keeps it. Needs impure evaluation (nix-instantiate is).
   velruneShell = builtins.storePath
-    /nix/store/2kh912igvmx6fql82fc7sniczpvdq90i-velrune-shell-direct-aarch64-unknown-linux-gnu-0.1.24;
+    /nix/store/9ii0gjrk5q8vzpm44d1z1m8wqb48zayk-velrune-shell-direct-aarch64-unknown-linux-gnu-0.1.25;
 
   # Copied to the store at evaluation time: no derivation to build.
   appDir = builtins.path { path = ./apps; name = "velrune-phone-apps"; };
@@ -91,9 +96,11 @@ in
     ];
     wants = [ "dbus.socket" "systemd-logind.service" "plymouth-quit.service" "user@${toString uid}.service" ];
     wantedBy = [ "multi-user.target" ];
-    # Starting either one stops the other (Conflicts= works both ways).
-    conflicts = [ "getty@tty1.service" "display-manager.service" ];
-    before = [ "display-manager.service" ];
+    # Starting either one stops the other (Conflicts= works both ways). The Shell
+    # owns the power key and the panel; fp6-lomiri-powerd would act on KEY_POWER and
+    # the backlight too, so it runs only with Lomiri (see below).
+    conflicts = [ "getty@tty1.service" "display-manager.service" "fp6-lomiri-powerd.service" ];
+    before = [ "display-manager.service" "fp6-lomiri-powerd.service" ];
     # Never restart the screen from switch-to-configuration.
     restartIfChanged = false;
     stopIfChanged = false;
@@ -140,6 +147,29 @@ in
   };
 
   environment.sessionVariables.VELRUNE_APPLICATION_MAP = applicationMap;
+
+  # ---- Power key -----------------------------------------------------------------
+  # Short press: the Shell (0.1.25) turns the screen off and on itself, so logind
+  # must ignore it (the base config already does; forced here). A 5 s hold reboots:
+  # recoverable over the network (boot_b brings back the known-good generation),
+  # unlike a poweroff, and the Shell has no power menu yet. The PMIC's own
+  # hardware reset on a much longer hold is unaffected.
+  services.logind.settings.Login = {
+    HandlePowerKey = lib.mkForce "ignore";
+    HandlePowerKeyLongPress = lib.mkForce "reboot";
+  };
+  # fp6-lomiri-powerd (Lomiri's display backend) reads KEY_POWER and drives the
+  # backlight. Not at boot any more: display-manager pulls it in, and starting
+  # velrune-session stops it (Conflicts= above).
+  systemd.services.fp6-lomiri-powerd.wantedBy = lib.mkForce [ ];
+  systemd.services.display-manager.wants = [ "fp6-lomiri-powerd.service" ];
+
+  # ---- Build fix for a clean checkout -------------------------------------------
+  # lomiri-kdeconnect's unit test include_bytes!() two PEM fixtures that the repo's
+  # .gitignore (*.pem) keeps out of git, so it cannot compile from a checkout. The
+  # phone's build had them on disk. Skip the tests; the package itself is unchanged.
+  hardware.fairphone6.kdeconnect.package = lib.mkForce
+    ((pkgs.callPackage ../kdeconnect/package.nix { }).overrideAttrs (_: { doCheck = false; }));
 
   # ---- PipeWire and VoLTE without Lomiri (plan section 3) --------------------
   # PipeWire is a user service; linger starts the user manager at boot, before
