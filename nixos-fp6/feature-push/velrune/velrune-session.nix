@@ -1,0 +1,206 @@
+# Velrune session on the Fairphone 6: the Velrune compositor and Shell run
+# directly on the panel (DRM/KMS, Adreno GLES through GBM) instead of Lomiri.
+#
+# Extends trial-lomiri-full-kernel6-fp6.nix through trial-velrune-session.nix.
+# Kernel, initrd, DTB and every heavy package stay as they are; this module
+# only adds units, /etc files and the Shell build the phone already holds.
+#
+#  * Boot reaches multi-user.target. Lomiri stays installed and its
+#    display-manager unit stays loadable but nothing pulls it in at boot
+#    (graphical.target is what wants display-manager.service).
+#    The plan's headless-a.nix used display-manager.enable = false, which
+#    renders the unit as a symlink to /dev/null (masked): Lomiri could then not
+#    be started by hand. It is not used here.
+#  * velrune-session.service: velrune-compositor --backend drm --ui-scale 1.5
+#    as `user` on tty1 with PAMName=login, the shape of nixpkgs'
+#    services/wayland/cage.nix and of the E2-lite run (2026-11-09). It conflicts
+#    with display-manager.service, so starting either one stops the other.
+#    Restart=on-failure with a start limit; past the limit OnFailure only logs
+#    and leaves a marker. Nothing else depends on the session, so SSH,
+#    NetBird, oFono, imsd and PipeWire keep running whatever it does.
+#  * Apps: format-1 manifests in ./apps (hand list: the Shell has no .desktop
+#    discovery yet, shell-plan T14) run the binaries on the user's Nix profile.
+#    Manifests cannot carry environment variables, so the launcher exports
+#    SLINT_SCALE_FACTOR=1.5 and GRID_UNIT_PX=8 for the compositor, the Shell and
+#    every app they start. The launcher, not Environment=, sets them: pam_env
+#    (PAMName=login) would otherwise put back Lomiri's GRID_UNIT_PX=24 from
+#    /etc/pam/environment.
+#  * Headless parts from phone-os-plan.md section 3: VoLTE at boot (imsd with
+#    AUDIO_USER, polkit rule for the radio group), linger for PipeWire, NetBird
+#    without a graphical agent, packet data kept on, plymouth-quit at boot, and
+#    the fp6.trial=1 revert timer for RAM boots.
+#  * Desktop speed-ups and live-test fixes: `user` is a trusted Nix user (direct
+#    `nix copy --to ssh-ng://user@phone`); VELRUNE_APPLICATION_MAP for links;
+#    Wi-Fi powersave forced off.
+#
+# Build/eval only. Never writes a boot image, slot or partition.
+{ config, lib, pkgs, ... }:
+let
+  user = "user";
+  uid = config.users.users.${user}.uid;
+  home = config.users.users.${user}.home;
+
+  # Cross-built Shell 0.1.24 (Shell repo agent/shell-phone b43a887, ci/cross-phone.nix;
+  # drv k89vd4c0...). Its compositor sets logind's LockedHint while the lock screen is
+  # up (--lock-hint auto, on for --backend drm), which needs the logind session that
+  # PAMName=login opens. Its closure is 0.1.22's (on the phone since E2-lite) plus
+  # the package itself. builtins.storePath makes it part of the system closure, so `nix copy` ships it
+  # and the phone's GC keeps it. Needs impure evaluation (nix-instantiate is).
+  velruneShell = builtins.storePath
+    /nix/store/2kh912igvmx6fql82fc7sniczpvdq90i-velrune-shell-direct-aarch64-unknown-linux-gnu-0.1.24;
+
+  # Copied to the store at evaluation time: no derivation to build.
+  appDir = builtins.path { path = ./apps; name = "velrune-phone-apps"; };
+
+  applicationMap = "${home}/.local/share/velrune/applications.json";
+
+  sessionEnv = {
+    SLINT_SCALE_FACTOR = "1.5";
+    GRID_UNIT_PX = "8";
+    VELRUNE_APPLICATION_MAP = applicationMap;
+    XDG_SESSION_TYPE = "wayland";
+    XDG_SESSION_DESKTOP = "velrune";
+    XDG_CURRENT_DESKTOP = "Velrune";
+    DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString uid}/bus";
+  };
+
+  # `env` runs after PAM has set the environment, so these values win.
+  launch = lib.escapeShellArgs ([ "${pkgs.coreutils}/bin/env" ]
+    ++ lib.mapAttrsToList (n: v: "${n}=${v}") sessionEnv
+    ++ [ "${velruneShell}/bin/velrune-compositor" "--backend" "drm" "--ui-scale" "1.5"
+         "--" "--no-catalog" "--app-dir" "${appDir}" ]);
+in
+{
+  system.nixos.tags = [ "velrune-session" ];
+
+  # ---- Lomiri off at boot, still startable by hand ----------------------------
+  systemd.defaultUnit = lib.mkForce "multi-user.target";
+  # boot-splash-fp6.nix leaves plymouth-quit to LightDM; nothing else would quit it.
+  systemd.services.plymouth-quit.wantedBy = lib.mkForce [ "multi-user.target" ];
+
+  # ---- Velrune session ----------------------------------------------------------
+  systemd.services.velrune-session = {
+    description = "Velrune Shell session on tty1";
+    after = [
+      "systemd-user-sessions.service"
+      "plymouth-start.service"
+      "plymouth-quit.service"
+      "systemd-logind.service"
+      "getty@tty1.service"
+      "user@${toString uid}.service"
+    ];
+    wants = [ "dbus.socket" "systemd-logind.service" "plymouth-quit.service" "user@${toString uid}.service" ];
+    wantedBy = [ "multi-user.target" ];
+    # Starting either one stops the other (Conflicts= works both ways).
+    conflicts = [ "getty@tty1.service" "display-manager.service" ];
+    before = [ "display-manager.service" ];
+    # Never restart the screen from switch-to-configuration.
+    restartIfChanged = false;
+    stopIfChanged = false;
+    unitConfig = {
+      ConditionPathExists = "/dev/tty1";
+      # Bounded: at most 4 starts in 5 minutes, then the unit fails for good.
+      StartLimitIntervalSec = 300;
+      StartLimitBurst = 4;
+      OnFailure = [ "velrune-session-failed.service" ];
+    };
+    serviceConfig = {
+      ExecStart = launch;
+      User = user;
+      PAMName = "login";
+      Restart = "on-failure";
+      RestartSec = "3s";
+      # SIGTERM gives the compositor its orderly stop (E2-lite: clean in < 1 s).
+      TimeoutStopSec = "15s";
+      IgnoreSIGPIPE = "no";
+      UtmpIdentifier = "tty1";
+      UtmpMode = "user";
+      TTYPath = "/dev/tty1";
+      TTYReset = "yes";
+      TTYVHangup = "yes";
+      TTYVTDisallocate = "yes";
+      StandardInput = "tty-fail";
+      StandardOutput = "journal";
+      StandardError = "journal";
+      SyslogIdentifier = "velrune-session";
+    };
+  };
+
+  # Past the start limit: record it and stop. No UI is started and nothing is
+  # stopped, so SSH, NetBird, oFono/imsd and PipeWire are untouched.
+  systemd.services.velrune-session-failed = {
+    description = "Velrune session failed past its start limit";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = [
+        "${pkgs.coreutils}/bin/touch /run/velrune-session.failed"
+        "${pkgs.util-linux}/bin/logger -p user.err -t velrune-session \"velrune-session failed past its start limit. Remote access and VoLTE are untouched. Lomiri: sudo systemctl start display-manager. Retry: sudo systemctl reset-failed velrune-session, then sudo systemctl start velrune-session\""
+      ];
+    };
+  };
+
+  environment.sessionVariables.VELRUNE_APPLICATION_MAP = applicationMap;
+
+  # ---- PipeWire and VoLTE without Lomiri (plan section 3) --------------------
+  # PipeWire is a user service; linger starts the user manager at boot, before
+  # (and independently of) the Velrune session.
+  users.users.${user}.linger = true;
+  services.fp6Ims.autoStart = true;
+  # Without it imsd looks up seat0's session for call audio.
+  systemd.services.imsd.environment.AUDIO_USER = user;
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id.indexOf("net.catcrafts.IMS1.") == 0 && subject.isInGroup("radio")) {
+        return polkit.Result.YES;
+      }
+    });
+  '';
+
+  # ---- Remote access and data without a graphical agent ----------------------
+  # fp6-vpn-restore (a graphical-session agent) was NetBird's only reconnect path.
+  services.netbird.clients.netbird.autoStart = lib.mkForce true;
+  # lomiri-indicator-network owned the mobile-data policy.
+  systemd.services.fp6-ofono-data-on = {
+    description = "FP6: keep oFono packet data enabled (no Lomiri policy owner)";
+    wantedBy = [ "ofono.service" ];
+    after = [ "fp6-ofono-online.service" ];
+    bindsTo = [ "ofono.service" ];
+    path = [ pkgs.systemd pkgs.gnugrep pkgs.coreutils ];
+    serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+    script = ''
+      m=$(busctl --system call org.ofono / org.ofono.Manager GetModems | grep -o '"/qrtrsoc_[0-9]*"' | head -1 | tr -d '"')
+      [ -n "$m" ] || exit 0
+      for i in $(seq 1 30); do
+        busctl --system call org.ofono "$m" org.ofono.ConnectionManager SetProperty sv Powered b true && exit 0
+        sleep 2
+      done
+      echo "ConnectionManager did not accept Powered"; exit 0
+    '';
+  };
+  # Network stays up with the screen off or locked. Nothing in this config turns
+  # Wi-Fi or data off on screen-off; the Lomiri-session suspects (Stage.qml
+  # SIGSTOP of background/kept-ready apps, netpolicy's empty foreground on the
+  # lock screen) belong to graphical-session.target, which this session never
+  # starts. Powersave is already off (hardware-fp6.nix); force it so a later
+  # module cannot turn it back on.
+  networking.networkmanager.wifi.powersave = lib.mkForce false;
+  # IPv6 on the Orng router black-holes: fixed in that NetworkManager profile
+  # on the phone (ipv6.method disabled), not here.
+
+  # ---- Desktop to phone copies --------------------------------------------------
+  # `nix copy --to ssh-ng://user@<phone>` without root or signatures. `user` is
+  # already in wheel with sudo, so this grants nothing it did not have.
+  nix.settings.trusted-users = lib.mkAfter [ user ];
+
+  # ---- RAM boots only: an image with fp6.trial=1 is never written to boot_b --
+  systemd.timers.fp6-trial-revert = {
+    wantedBy = [ "timers.target" ];
+    unitConfig.ConditionKernelCommandLine = "fp6.trial=1";
+    timerConfig = { OnBootSec = "15min"; AccuracySec = "10s"; };
+  };
+  systemd.services.fp6-trial-revert = {
+    description = "Unconfirmed trial boot: reboot back into the installed boot_b";
+    unitConfig.ConditionKernelCommandLine = "fp6.trial=1";
+    serviceConfig = { Type = "oneshot"; ExecStart = "${pkgs.systemd}/bin/systemctl --force reboot"; };
+  };
+}

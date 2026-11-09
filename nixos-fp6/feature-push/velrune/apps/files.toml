@@ -1,0 +1,8 @@
+format = 1
+id = "files"
+kind = "app"
+name = "Files"
+icon = "folder"
+categories = ["utility"]
+exec = "/home/user/.nix-profile/bin/velrune-files"
+args = ["--local"]

@@ -1,0 +1,8 @@
+format = 1
+id = "reminders"
+kind = "app"
+name = "Reminders"
+icon = "reminder"
+categories = ["productivity"]
+exec = "/home/user/.nix-profile/bin/velrune-reminders"
+args = ["--local"]

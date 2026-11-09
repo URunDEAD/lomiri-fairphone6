@@ -1,0 +1,8 @@
+format = 1
+id = "email"
+kind = "app"
+name = "Mail"
+icon = "mail-unread"
+categories = ["communication"]
+exec = "/home/user/.nix-profile/bin/velrune-email"
+args = ["--local"]

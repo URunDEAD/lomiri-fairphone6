@@ -1,0 +1,8 @@
+format = 1
+id = "phone"
+kind = "app"
+name = "Phone"
+icon = "call-start"
+categories = ["communication"]
+exec = "/home/user/.nix-profile/bin/velrune-phone"
+args = []

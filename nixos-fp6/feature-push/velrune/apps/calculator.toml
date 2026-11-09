@@ -1,0 +1,8 @@
+format = 1
+id = "calculator"
+kind = "app"
+name = "Calculator"
+icon = "keypad"
+categories = ["utility"]
+exec = "/home/user/.nix-profile/bin/velrune-calculator"
+args = []

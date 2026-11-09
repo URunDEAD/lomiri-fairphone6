@@ -1,0 +1,8 @@
+format = 1
+id = "docviewer"
+kind = "app"
+name = "Document Viewer"
+icon = "document"
+categories = ["productivity"]
+exec = "/home/user/.nix-profile/bin/velrune-docviewer"
+args = ["--local"]
