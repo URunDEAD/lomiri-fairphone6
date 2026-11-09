@@ -21,8 +21,12 @@
 #  * Power key: the Shell owns it (0.1.25 blanks and wakes the panel). logind
 #    ignores a short press and reboots on a 5 s hold (into whatever boot_b pins); fp6-lomiri-powerd, which also
 #    reads KEY_POWER and drives the backlight, now runs only with Lomiri.
-#  * Apps: format-1 manifests in ./apps (hand list: the Shell has no .desktop
-#    discovery yet, shell-plan T14) run the binaries on the user's Nix profile.
+#  * Shell: one store path, ./shell-path.nix (or --argstr velruneShellPath).
+#  * Apps: no hand list. ExecStartPre (gen-apps.sh) writes format-1 manifests
+#    into /run/user/<uid>/velrune-apps from the org.velrune.*.desktop entries in
+#    ~/.nix-profile at every session start, so installed apps appear without a
+#    rebuild. Interim: the Shell has no .desktop discovery yet (shell-plan T14).
+#    The manifests run the binaries from the user's Nix profile.
 #    Manifests cannot carry environment variables, so the launcher exports
 #    SLINT_SCALE_FACTOR=1.5 and GRID_UNIT_PX=8 for the compositor, the Shell and
 #    every app they start. The launcher, not Environment=, sets them: pam_env
@@ -45,18 +49,22 @@ let
   uid = config.users.users.${user}.uid;
   home = config.users.users.${user}.home;
 
-  # Cross-built Shell 0.1.25 (Shell repo agent/shell-phone 49c9698, ci/cross-phone.nix;
-  # drv 72aly8c7...). Its compositor sets logind's LockedHint while the lock screen is
-  # up (--lock-hint auto, on for --backend drm), which needs the logind session that
-  # PAMName=login opens, and it turns the screen off and on with the power key itself.
-  # Its closure is 0.1.22's (on the phone since E2-lite) plus the package itself.
-  # builtins.storePath makes it part of the system closure, so `nix copy` ships it
-  # and the phone's GC keeps it. Needs impure evaluation (nix-instantiate is).
-  velruneShell = builtins.storePath
-    /nix/store/9ii0gjrk5q8vzpm44d1z1m8wqb48zayk-velrune-shell-direct-aarch64-unknown-linux-gnu-0.1.25;
+  # The Shell build: one store path, options.velrune.shellPath (default ./shell-path.nix,
+  # or --argstr velruneShellPath through trial-velrune-session.nix). builtins.storePath
+  # makes it part of the system closure, so `nix copy` ships it and the phone's GC keeps
+  # it. Needs impure evaluation (nix-instantiate is). The compositor sets logind's
+  # LockedHint while the lock screen is up (--lock-hint auto, on for --backend drm; needs
+  # the logind session PAMName=login opens) and turns the screen off and on with the
+  # power key itself.
+  velruneShell = builtins.storePath config.velrune.shellPath;
 
-  # Copied to the store at evaluation time: no derivation to build.
-  appDir = builtins.path { path = ./apps; name = "velrune-phone-apps"; };
+  # Rewritten at every session start by the ExecStartPre below from the desktop entries
+  # in the user's profile. Under /run/user: gone at logout, never stale.
+  appDir = "/run/user/${toString uid}/velrune-apps";
+  genApps = pkgs.writeShellScript "velrune-gen-apps" ''
+    export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk ]}
+    ${builtins.readFile ./gen-apps.sh}
+  '';
 
   applicationMap = "${home}/.local/share/velrune/applications.json";
 
@@ -72,9 +80,16 @@ let
   launch = lib.escapeShellArgs ([ "${pkgs.coreutils}/bin/env" ]
     ++ lib.mapAttrsToList (n: v: "${n}=${v}") sessionEnv
     ++ [ "${velruneShell}/bin/velrune-compositor" "--backend" "drm" "--ui-scale" "1.5"
-         "--" "--no-catalog" "--app-dir" "${appDir}" ]);
+         "--" "--no-catalog" "--app-dir" appDir ]);
 in
 {
+  options.velrune.shellPath = lib.mkOption {
+    type = lib.types.str;
+    default = import ./shell-path.nix;
+    description = "Store path of the Velrune Shell build (velrune-compositor and velrune-shell).";
+  };
+
+  config = {
   system.nixos.tags = [ "velrune-session" ];
 
   # ---- Lomiri off at boot, still startable by hand ----------------------------
@@ -119,7 +134,15 @@ in
       # compositor ("Failed to disable connectors ... Permission denied",
       # direct_session active=false). Bring tty1 to the foreground first, as root
       # ("+"), before PAM opens the session. At boot it is already tty1: a no-op.
-      ExecStartPre = "+${pkgs.kbd}/bin/chvt 1";
+      #
+      # Then the app dir: manifests from the user's Nix profile (Camera, Chat and new apps
+      # appear after the next session start, no rebuild). Root ("+") because the PAM
+      # session of User= does not exist yet; "-" so a failure leaves the Shell with an
+      # empty launcher instead of no session.
+      ExecStartPre = [
+        "+${pkgs.kbd}/bin/chvt 1"
+        "+-${genApps} ${appDir} ${home}/.nix-profile ${user}"
+      ];
       ExecStart = launch;
       User = user;
       PAMName = "login";
@@ -197,6 +220,18 @@ in
   # (and independently of) the Velrune session.
   users.users.${user}.linger = true;
   services.fp6Ims.autoStart = true;
+  # fp6-ims-pdn exits 1 on purpose when the IMS call drops or rmnet_ims vanishes
+  # ("exiting for a restart", seen once during activation) and relies on systemd.
+  # Restart=on-failure was already set; the delay was 30 s. Its preStart waits for the
+  # PS attach (up to 300 s), so a quick restart never spins. imsd Requires= it and is
+  # restarted with it. The start limit is generous so a flapping modem cannot leave
+  # VoLTE dead until reset-failed.
+  systemd.services.fp6-ims-pdn.serviceConfig = {
+    Restart = lib.mkForce "on-failure";
+    RestartSec = lib.mkForce "5s";
+  };
+  systemd.services.fp6-ims-pdn.startLimitIntervalSec = lib.mkForce 600;
+  systemd.services.fp6-ims-pdn.startLimitBurst = lib.mkForce 20;
   # Without it imsd looks up seat0's session for call audio.
   systemd.services.imsd.environment.AUDIO_USER = user;
   security.polkit.extraConfig = ''
@@ -228,12 +263,21 @@ in
       echo "ConnectionManager did not accept Powered"; exit 0
     '';
   };
-  # Network stays up with the screen off or locked. Nothing in this config turns
-  # Wi-Fi or data off on screen-off; the Lomiri-session suspects (Stage.qml
-  # SIGSTOP of background/kept-ready apps, netpolicy's empty foreground on the
-  # lock screen) belong to graphical-session.target, which this session never
-  # starts. Powersave is already off (hardware-fp6.nix); force it so a later
-  # module cannot turn it back on.
+  # Network stays up with the screen off or locked. Checked on the evaluated config
+  # (OS2, 2026-11-09), nothing here turns Wi-Fi or data off or suspends:
+  #  * systemd.sleep AllowSuspend/Hibernation/Hybrid/SuspendThenHibernate = "no"
+  #    (fp6SuspendPolicy mode "guarded"), logind IdleAction "ignore", Suspend/Hibernate
+  #    keys and the short power key "ignore", CanSuspend "na";
+  #  * Wi-Fi powersave off (forced below), no rfkill/airplane unit or udev rule;
+  #  * the Shell's screen off is a DRM blank in the compositor, and its system_sleep
+  #    module only takes a logind delay inhibitor for PrepareForSleep; it never calls
+  #    Suspend;
+  #  * the Lomiri-session suspects (Stage.qml SIGSTOP of background/kept-ready apps,
+  #    netpolicy's empty foreground on the lock screen) belong to
+  #    graphical-session.target, which this session never starts. fp6-netpolicy-helper
+  #    runs but acts only on calls from the user daemon, which is not running.
+  # Powersave is already off (hardware-fp6.nix); force it so a later module cannot
+  # turn it back on.
   networking.networkmanager.wifi.powersave = lib.mkForce false;
   # IPv6 on the Orng router black-holes: fixed in that NetworkManager profile
   # on the phone (ipv6.method disabled), not here.
@@ -257,5 +301,6 @@ in
     description = "Unconfirmed trial boot: reboot back into the installed boot_b";
     unitConfig.ConditionKernelCommandLine = "fp6.trial=1";
     serviceConfig = { Type = "oneshot"; ExecStart = "${pkgs.systemd}/bin/systemctl --force reboot"; };
+  };
   };
 }

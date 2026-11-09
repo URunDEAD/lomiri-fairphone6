@@ -1,8 +1,0 @@
-format = 1
-id = "notes"
-kind = "app"
-name = "Notes"
-icon = "document"
-categories = ["productivity"]
-exec = "/home/user/.nix-profile/bin/velrune-notes"
-args = ["--local"]

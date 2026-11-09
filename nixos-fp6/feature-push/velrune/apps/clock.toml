@@ -1,8 +1,0 @@
-format = 1
-id = "clock"
-kind = "app"
-name = "Clock"
-icon = "clock"
-categories = ["utility"]
-exec = "/home/user/.nix-profile/bin/velrune-clock"
-args = ["--local"]

@@ -1,8 +1,0 @@
-format = 1
-id = "chat"
-kind = "app"
-name = "Chat"
-icon = "message"
-categories = ["communication"]
-exec = "/home/user/.nix-profile/bin/velrune-chat"
-args = []

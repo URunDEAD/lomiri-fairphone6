@@ -1,8 +1,0 @@
-format = 1
-id = "gallery"
-kind = "app"
-name = "Gallery"
-icon = "image"
-categories = ["media"]
-exec = "/home/user/.nix-profile/bin/velrune-gallery"
-args = ["--local"]

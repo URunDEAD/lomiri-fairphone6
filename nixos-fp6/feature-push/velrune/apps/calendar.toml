@@ -1,8 +1,0 @@
-format = 1
-id = "calendar"
-kind = "app"
-name = "Calendar"
-icon = "calendar"
-categories = ["productivity"]
-exec = "/home/user/.nix-profile/bin/velrune-calendar"
-args = ["--local"]

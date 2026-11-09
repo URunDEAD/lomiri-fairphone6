@@ -1,8 +1,0 @@
-format = 1
-id = "contacts"
-kind = "app"
-name = "Contacts"
-icon = "contact"
-categories = ["communication"]
-exec = "/home/user/.nix-profile/bin/velrune-contacts"
-args = ["--local"]
