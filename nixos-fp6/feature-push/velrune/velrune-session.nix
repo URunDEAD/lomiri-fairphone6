@@ -232,6 +232,43 @@ in
   };
   systemd.services.fp6-ims-pdn.startLimitIntervalSec = lib.mkForce 600;
   systemd.services.fp6-ims-pdn.startLimitBurst = lib.mkForce 20;
+
+  # imsd must only ever run against a fresh PDN. Live, after `switch-to-configuration
+  # test`: fp6-ims-pdn was "active" but imsd looped on "bring-up FAILED: no 401 to
+  # unprotected REGISTER"; stopping imsd, restarting the PDN, waiting 6 s and starting
+  # imsd fixed it. So:
+  #  * BindsTo + After: a stop or restart of the PDN takes imsd down and (PartOf) brings it
+  #    back after the PDN is up again, never in parallel with it;
+  #  * ExecStartPre settles 6 s before every imsd start, so the new IMS link, route and
+  #    /run/imsd.env are in place (the manual fix's wait);
+  #  * three failed bring-ups in 10 minutes (20 s apart) end in OnFailure, which restarts
+  #    the PDN and then imsd (fp6-ims-recover). Bounded: 6 recoveries per hour, then imsd
+  #    stays failed and the journal says so; a person decides.
+  systemd.services.imsd = {
+    bindsTo = [ "fp6-ims-pdn.service" ];
+    onFailure = [ "fp6-ims-recover.service" ];
+    startLimitIntervalSec = lib.mkForce 600;
+    startLimitBurst = lib.mkForce 3;
+    serviceConfig = {
+      ExecStartPre = "${pkgs.coreutils}/bin/sleep 6";
+      RestartSec = lib.mkForce "20s";
+    };
+  };
+  systemd.services.fp6-ims-recover = {
+    description = "Restart the IMS PDN and imsd after repeated failed IMS registrations";
+    startLimitIntervalSec = 3600;
+    startLimitBurst = 6;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "fp6-ims-recover" ''
+        export PATH=${lib.makeBinPath [ pkgs.systemd pkgs.util-linux ]}
+        logger -p user.warning -t fp6-ims-recover "imsd failed repeatedly: restarting fp6-ims-pdn, then imsd"
+        systemctl reset-failed imsd.service
+        systemctl restart fp6-ims-pdn.service || logger -p user.warning -t fp6-ims-recover "fp6-ims-pdn restart reported failure; starting imsd anyway"
+        systemctl start imsd.service
+      '';
+    };
+  };
   # Without it imsd looks up seat0's session for call audio.
   systemd.services.imsd.environment.AUDIO_USER = user;
   security.polkit.extraConfig = ''
