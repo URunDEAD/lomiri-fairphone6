@@ -189,10 +189,10 @@
   };
   # The Shell (velrune-compositor and velrune-shell), the session's default.
   shell = {
-      out = "/nix/store/7k47dgps5j56npx291q7hmq32ijqfc39-velrune-shell-direct-aarch64-unknown-linux-gnu-0.1.53";
+      out = "/nix/store/knfr9lpfpy2xxlksjshs4irgsb2d1z08-velrune-shell-direct-aarch64-unknown-linux-gnu-0.1.94";
       recipe = "ci/cross-phone.nix"; arg = "shell";
-      src = { url = "https://gitlab.com/velrune/shell.git"; rev = "531605499bbeb8bbf6785954049210f31a8b67b0";
-        name = "shell-src-53"; narHash = "sha256-+09j2Z0Nx7oaReA/Ci77079Otix9VkaWLUK4wXU4jYs="; };
+      src = { url = "https://gitlab.com/velrune/shell.git"; rev = "599efdcdd2094ca0de3e784ade9b7ad81c100bca";
+        name = "src"; narHash = "sha256-NQBmAysoD6yykuVuB9WUtT54G6MHzGHy6/BxTlqM2eI="; };
       gitSources = [
         { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
         { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }

@@ -64,6 +64,7 @@ let
   systemShare = "/run/current-system/sw/share";
   # pam_faillock tally of the Shell's PIN lock (root-owned, persistent).
   faillockDir = "/var/lib/velrune-lock/faillock";
+  lockCheck = pkgs.callPackage ./lock-check/package.nix { };
   # `faillock` for that folder: sudo velrune-faillock --user user [--reset]
   velruneFaillock = pkgs.writeShellScriptBin "velrune-faillock" ''
     exec ${config.security.pam.package}/bin/faillock --dir ${faillockDir} "$@"
@@ -219,12 +220,9 @@ in
   # Show / reset by hand: sudo velrune-faillock --user user [--reset]
   # (= faillock --dir /var/lib/velrune-lock/faillock --user user --reset)
   #
-  # LIMIT, measured (linux-pam 1.7.2, pam_start_confdir, unprivileged caller): the tally is
-  # only read and written by a process that may open the folder. The compositor's PAM
-  # child runs as `user`, so with a root-owned folder preauth and authsucc pass and
-  # authfail returns PAM_PERM_DENIED without counting: the stack stays correct (right PIN
-  # opens, wrong PIN fails) but the root-owned counter does not count until the check runs
-  # in a privileged helper. See reports/team-os.md, revision 5c.
+  # The tally is only read and written by a process that may open the folder (measured,
+  # linux-pam 1.7.2): called as `user` the stack stays correct but never counts. The
+  # counting check is velrune-lock-check below, which runs this service as root.
   security.pam.services.velrune-lock = {
     rules.auth =
       let
@@ -243,6 +241,70 @@ in
       };
   };
   systemd.tmpfiles.settings."40-velrune-lock".${faillockDir}.d = { user = "root"; group = "root"; mode = "0700"; };
+
+  # The privileged check, so the root-owned tally above counts (the compositor's own PAM
+  # child runs as `user` and cannot open it). Socket-activated, one root process per
+  # connection; protocol in ./lock-check/velrune-lock-check.c and reports/team-os.md.
+  # Only the uid that owns the active seat0 session (>= 1000) is checked, as itself.
+  systemd.sockets.velrune-lock-check = {
+    description = "Velrune lock-screen PIN check socket";
+    wantedBy = [ "sockets.target" ];
+    listenStreams = [ "/run/velrune-lock/check.sock" ];
+    socketConfig = {
+      Accept = true;
+      SocketUser = "root";
+      SocketGroup = "users";
+      SocketMode = "0660";
+      DirectoryMode = "0755";
+      # Attempts are serialized by the helper; this only bounds waiting processes.
+      MaxConnections = 4;
+    };
+  };
+  systemd.services."velrune-lock-check@" = {
+    description = "Velrune lock-screen PIN check (PAM velrune-lock, root)";
+    serviceConfig = {
+      ExecStart = lib.escapeShellArgs [
+        "${lockCheck}/bin/velrune-lock-check"
+        "--service" "velrune-lock"
+        "--dir" faillockDir "--deny" "10" "--unlock-time" "900" "--fail-interval" "900"
+        "--lock-file" "/var/lib/velrune-lock/attempt.lock" "--min-fail-ms" "2000"
+      ];
+      StandardInput = "socket";
+      StandardOutput = "socket";
+      StandardError = "journal";
+      StateDirectory = "velrune-lock";
+      StateDirectoryMode = "0700";
+      RuntimeMaxSec = 60;
+      UMask = "0077";
+      # Root for /etc/shadow (owner read) and the tally; no capabilities at all.
+      CapabilityBoundingSet = "";
+      AmbientCapabilities = "";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      PrivateNetwork = true;
+      IPAddressDeny = "any";
+      RestrictAddressFamilies = [ "AF_UNIX" ];
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectKernelLogs = true;
+      ProtectControlGroups = true;
+      ProtectClock = true;
+      ProtectHostname = true;
+      ProtectProc = "invisible";
+      RestrictNamespaces = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      LockPersonality = true;
+      MemoryDenyWriteExecute = true;
+      SystemCallArchitectures = "native";
+      SystemCallFilter = [ "@system-service" "~@privileged" "~@resources" ];
+      # pam_faillock fchown()s a new tally file to the user; denied, it stays root's.
+      SystemCallErrorNumber = "EPERM";
+    };
+  };
 
   # ---- Velrune apps, system-wide ----------------------------------------------------
   environment.systemPackages = cfg.apps ++ [ velruneFaillock ];
