@@ -67,6 +67,7 @@ let
   # pam_faillock's settings, used by both the PAM stack and velrune-lock-check's flags.
   faillockLimits = { deny = 10; unlock_time = 900; fail_interval = 900; };
   lockCheck = pkgs.callPackage ./lock-check/package.nix { };
+  imsRecover = pkgs.callPackage ./ims-recover/package.nix { };
 
   # Velrune Messages, when it is among the system apps: its service's user units and the
   # oFono plugin that spools texts for it (built from the same pinned Messages commit,
@@ -440,6 +441,19 @@ in
   };
   systemd.services.fp6-ims-pdn.startLimitIntervalSec = lib.mkForce 600;
   systemd.services.fp6-ims-pdn.startLimitBurst = lib.mkForce 20;
+  # Past that limit StartNetwork has failed ~20 times: escalate (fp6-ims-recover below).
+  systemd.services.fp6-ims-pdn.onFailure = [ "fp6-ims-recover@pdn.service" ];
+
+  # switch-to-configuration never stops or restarts the telephony units, even when their
+  # unit files change (a changed unit would otherwise be restarted mid-call, and an oFono
+  # restart takes fp6-ims-pdn and imsd down through BindsTo). Their changes apply at the
+  # next boot, or when the runbook's post-activation step restarts them on purpose:
+  # restart ofono fp6-ofono-online fp6-ofono-data-on; reset-failed; start fp6-ims-pdn imsd.
+  systemd.services.ofono.restartIfChanged = false;
+  systemd.services.fp6-ofono-online.restartIfChanged = false;
+  systemd.services.fp6-ofono-data-on.restartIfChanged = false;
+  systemd.services.fp6-ims-pdn.restartIfChanged = false;
+  systemd.services.imsd.restartIfChanged = false;
 
   # imsd must only ever run against a fresh PDN. Live, after `switch-to-configuration
   # test`: fp6-ims-pdn was "active" but imsd looped on "bring-up FAILED: no 401 to
@@ -450,11 +464,15 @@ in
   #  * ExecStartPre settles 6 s before every imsd start, so the new IMS link, route and
   #    /run/imsd.env are in place (the manual fix's wait);
   #  * three failed bring-ups in 10 minutes (20 s apart) end in OnFailure, which restarts
-  #    the PDN and then imsd (fp6-ims-recover). Bounded: 6 recoveries per hour, then imsd
-  #    stays failed and the journal says so; a person decides.
+  #    the PDN and then imsd (fp6-ims-recover@imsd); a second imsd failure within 15 min,
+  #    or the PDN itself failing (fp6-ims-recover@pdn), escalates to restarting oFono,
+  #    fp6-ofono-online and fp6-ofono-data-on first, which is what cured StartNetwork's
+  #    CallFailed internal/211 and cm/1110 by hand (2026-11-10). Never while imsd is active
+  #    or oFono lists a call; oFono at most every 2 min; 6 recoveries per hour per trigger,
+  #    then the unit stays failed and the journal says so: a person decides.
   systemd.services.imsd = {
     bindsTo = [ "fp6-ims-pdn.service" ];
-    onFailure = [ "fp6-ims-recover.service" ];
+    onFailure = [ "fp6-ims-recover@imsd.service" ];
     startLimitIntervalSec = lib.mkForce 600;
     startLimitBurst = lib.mkForce 3;
     serviceConfig = {
@@ -462,21 +480,18 @@ in
       RestartSec = lib.mkForce "20s";
     };
   };
-  systemd.services.fp6-ims-recover = {
-    description = "Restart the IMS PDN and imsd after repeated failed IMS registrations";
+  systemd.services."fp6-ims-recover@" = {
+    description = "Recover VoLTE after %i failed (PDN, or oFono then PDN)";
     startLimitIntervalSec = 3600;
     startLimitBurst = 6;
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "fp6-ims-recover" ''
-        export PATH=${lib.makeBinPath [ pkgs.systemd pkgs.util-linux ]}
-        logger -p user.warning -t fp6-ims-recover "imsd failed repeatedly: restarting fp6-ims-pdn, then imsd"
-        systemctl reset-failed imsd.service
-        systemctl restart fp6-ims-pdn.service || logger -p user.warning -t fp6-ims-recover "fp6-ims-pdn restart reported failure; starting imsd anyway"
-        systemctl start imsd.service
-      '';
+      ExecStart = "${imsRecover}/bin/fp6-ims-recover %i";
+      # Starting the PDN waits for its PS attach (up to 300 s) and StartNetwork.
+      TimeoutStartSec = 600;
     };
   };
+  systemd.tmpfiles.settings."40-fp6-ims-recover"."/run/fp6-ims-recover".d = { user = "root"; group = "root"; mode = "0700"; };
   # Without it imsd looks up seat0's session for call audio.
   systemd.services.imsd.environment.AUDIO_USER = user;
   security.polkit.extraConfig = ''
