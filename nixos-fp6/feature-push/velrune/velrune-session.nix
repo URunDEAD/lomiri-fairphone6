@@ -62,6 +62,12 @@ let
   # screen off and on with the power key itself.
   velruneShell = cfg.shell;
   systemShare = "/run/current-system/sw/share";
+  # pam_faillock tally of the Shell's PIN lock (root-owned, persistent).
+  faillockDir = "/var/lib/velrune-lock/faillock";
+  # `faillock` for that folder: sudo velrune-faillock --user user [--reset]
+  velruneFaillock = pkgs.writeShellScriptBin "velrune-faillock" ''
+    exec ${config.security.pam.package}/bin/faillock --dir ${faillockDir} "$@"
+  '';
 
   applicationMap = "${home}/.local/share/velrune/applications.json";
 
@@ -203,10 +209,43 @@ in
   # "velrune-lock": NixOS's default stack, pam_unix through the setuid unix_chkpwd helper
   # (the Shell runs as `user`). Without the service the secure lock can never open.
   # secure_lock stays off by default in the Shell, so nothing changes until enabled.
-  security.pam.services.velrune-lock = { };
+  #
+  # A durable attempt limit, for this service only (login, sshd, sudo and su are unchanged):
+  # pam_faillock preauth, then pam_unix ([success=1 default=bad]), then authfail
+  # ([default=die]) and authsucc (sufficient), Shell-B's tested order. 10 failures lock for
+  # 15 min. The tally lives in a root-owned folder that survives reboots. Not `silent`: the
+  # Shell reads "The account is locked due to N failed logins" / "(N minutes left to
+  # unlock)" (C locale) to show "Too many attempts. Try again in N min."
+  # Show / reset by hand: sudo velrune-faillock --user user [--reset]
+  # (= faillock --dir /var/lib/velrune-lock/faillock --user user --reset)
+  #
+  # LIMIT, measured (linux-pam 1.7.2, pam_start_confdir, unprivileged caller): the tally is
+  # only read and written by a process that may open the folder. The compositor's PAM
+  # child runs as `user`, so with a root-owned folder preauth and authsucc pass and
+  # authfail returns PAM_PERM_DENIED without counting: the stack stays correct (right PIN
+  # opens, wrong PIN fails) but the root-owned counter does not count until the check runs
+  # in a privileged helper. See reports/team-os.md, revision 5c.
+  security.pam.services.velrune-lock = {
+    rules.auth =
+      let
+        auth = config.security.pam.services.velrune-lock.rules.auth;
+        faillock = mode: order: control: {
+          inherit order control;
+          modulePath = "${config.security.pam.package}/lib/security/pam_faillock.so";
+          settings = { ${mode} = true; dir = faillockDir; deny = 10; unlock_time = 900; };
+        };
+      in
+      {
+        faillock-preauth = faillock "preauth" (auth.unix.order - 10) "required";
+        unix.control = lib.mkForce "[success=1 default=bad]";
+        faillock-authfail = faillock "authfail" (auth.unix.order + 10) "[default=die]";
+        faillock-authsucc = faillock "authsucc" (auth.unix.order + 20) "sufficient";
+      };
+  };
+  systemd.tmpfiles.settings."40-velrune-lock".${faillockDir}.d = { user = "root"; group = "root"; mode = "0700"; };
 
   # ---- Velrune apps, system-wide ----------------------------------------------------
-  environment.systemPackages = cfg.apps;
+  environment.systemPackages = cfg.apps ++ [ velruneFaillock ];
   # share/velrune: ai-actions (Chat's action discovery), doc-plugins, account-plugins.
   environment.pathsToLink = [ "/share/velrune" ];
   # Session-bus activation files (org.velrune.*.service) go into the bus configuration,
