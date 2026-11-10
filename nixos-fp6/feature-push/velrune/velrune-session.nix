@@ -198,6 +198,13 @@ in
 
   environment.sessionVariables.VELRUNE_APPLICATION_MAP = applicationMap;
 
+  # ---- Shell PIN lock -----------------------------------------------------------------
+  # The Shell's opt-in secure lock checks the user's password through PAM service
+  # "velrune-lock": NixOS's default stack, pam_unix through the setuid unix_chkpwd helper
+  # (the Shell runs as `user`). Without the service the secure lock can never open.
+  # secure_lock stays off by default in the Shell, so nothing changes until enabled.
+  security.pam.services.velrune-lock = { };
+
   # ---- Velrune apps, system-wide ----------------------------------------------------
   environment.systemPackages = cfg.apps;
   # share/velrune: ai-actions (Chat's action discovery), doc-plugins, account-plugins.
