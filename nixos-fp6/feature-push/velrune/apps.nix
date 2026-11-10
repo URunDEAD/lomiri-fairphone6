@@ -5,66 +5,10 @@
 {
   nixpkgs = { owner = "NixOS"; repo = "nixpkgs";
     rev = "31ecbaca1bdefa45dffc409f0250bd8039ea0010"; narHash = "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM="; };
+  # Built from apps.docviewer's source with ci/cross-doc-plugins.nix; shared by the apps
+  # marked usesDocPlugins, so the system holds one copy.
+  docPlugins = { out = "/nix/store/53phq11zrx91l5g4am98jqxn4s0b6g13-velrune-doc-plugins-device-aarch64-unknown-linux-gnu-0.1.7"; recipe = "ci/cross-doc-plugins.nix"; };
   apps = {
-    docviewer = {
-      out = "/nix/store/k1w9xm2wykqqpxrmmjdg5kyagjiff9dw-velrune-docviewer-device-aarch64-unknown-linux-gnu-0.1.5";
-      recipe = "ci/cross-device.nix"; arg = "docviewer";
-      src = { url = "https://gitlab.com/velrune/applications/docviewer.git"; rev = "8c89603a5a3fd1e1285f2c232ff6b5b21c5ee67d";
-        name = "docviewer-source"; narHash = "sha256-Tu86Isx0aeYjmyBGDo6SWgdi3JXFE7NATCN1sTfukAo="; };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "52b74c211d5b3b9050a780fe76a153d71f1a65d7"; narHash = "sha256-+TkYsNIYYCqs0mDJX6IB5xomhDyjXW7hi0zgvjltB5w="; }
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/media.git"; rev = "e31a84121c818a2a66cd4f930bc6062b03046157"; narHash = "sha256-U5LNidIPa+imFjZlChjybF8W10D9XHshIAnweVbiYhM="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
-    gallery = {
-      out = "/nix/store/pmik9ss7jjpdy519y5hhc34jcrsxzr6l-velrune-gallery-device-aarch64-unknown-linux-gnu-0.1.7";
-      recipe = "ci/cross-device.nix"; arg = "gallery";
-      src = { url = "https://gitlab.com/velrune/applications/gallery.git"; rev = "e625079e2d2a9363ba06748cd5b929b4220960b1";
-        name = "gallery-source"; narHash = "sha256-OQLWtp26XVUdrsx+u5wxPEII9lDeWwGh/X8i3IQs+Jg="; };
-      extras = {
-        docviewer = { url = "https://gitlab.com/velrune/applications/docviewer.git"; rev = "8c89603a5a3fd1e1285f2c232ff6b5b21c5ee67d";
-          narHash = "sha256-Tu86Isx0aeYjmyBGDo6SWgdi3JXFE7NATCN1sTfukAo="; hashArg = "docviewerNarHash"; };
-      };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "52b74c211d5b3b9050a780fe76a153d71f1a65d7"; narHash = "sha256-+TkYsNIYYCqs0mDJX6IB5xomhDyjXW7hi0zgvjltB5w="; }
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/media.git"; rev = "e31a84121c818a2a66cd4f930bc6062b03046157"; narHash = "sha256-U5LNidIPa+imFjZlChjybF8W10D9XHshIAnweVbiYhM="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
-    email = {
-      out = "/nix/store/m879cvwmqasiw7585zlhlln2qrrkn49f-velrune-email-device-aarch64-unknown-linux-gnu-0.1.7";
-      recipe = "ci/cross-device.nix"; arg = "email";
-      src = { url = "https://gitlab.com/velrune/applications/email.git"; rev = "e22729d29b500adedeae454ab1a9945960bfaea5";
-        name = "email-source"; narHash = "sha256-SP5Lr8Uyafj8ZEHm33bi+BeZRwfFdD++3PuMeqIkw/c="; };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "16200572e2c7725497dc63725bb1d18866b58862"; narHash = "sha256-v5pzDAf0Ux9E4yy/WS8yxfuKe2DF/pMar0kY82fPie4="; }
-        { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "52b74c211d5b3b9050a780fe76a153d71f1a65d7"; narHash = "sha256-+TkYsNIYYCqs0mDJX6IB5xomhDyjXW7hi0zgvjltB5w="; }
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/intelligence.git"; rev = "ca93a2c8704ff0f4d27fb82f3e607a72a2396f01"; narHash = "sha256-u0P14fNW8lpx/3hZhl/wEsIbyZWrczo/800CHAaTP+w="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
-    files = {
-      out = "/nix/store/m3nphax3c9hs5c58izs9d0fgzipxbdl2-velrune-files-device-aarch64-unknown-linux-gnu-0.1.10";
-      recipe = "ci/cross-device.nix"; arg = "files";
-      src = { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "52b74c211d5b3b9050a780fe76a153d71f1a65d7";
-        name = "files-source"; narHash = "sha256-+TkYsNIYYCqs0mDJX6IB5xomhDyjXW7hi0zgvjltB5w="; };
-      extras = {
-        docviewer = { url = "https://gitlab.com/velrune/applications/docviewer.git"; rev = "17b52fc7aafabc55088a7ac1aee52b182f023ead";
-          narHash = "sha256-5/wPQAi2bHXW5ykKiVm5NaI++NZtbq9NlhZ9nB2N+n0="; hashArg = "docviewerNarHash"; };
-      };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-        { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "08147dbe7434e4b6aee67e3511661918bba5ebc1"; narHash = "sha256-Y5kSoKBkKpLKayTlwna0f2nnKo4WYvp/l2O96zxe87Q="; }
-        { url = "https://gitlab.com/velrune/core.git"; rev = "be38eef30fb7e09a8a8c83a3ac44469a92c31caf"; narHash = "sha256-DFIXdcItzPZa9O0//MBtQ9pKY/JspyND1S3s2XqWsFg="; }
-        { url = "https://gitlab.com/velrune/media.git"; rev = "e31a84121c818a2a66cd4f930bc6062b03046157"; narHash = "sha256-U5LNidIPa+imFjZlChjybF8W10D9XHshIAnweVbiYhM="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "c5f991336fdd7a215900ee12f13e379c105f850a"; narHash = "sha256-YeHvQXLC+x0kFZQflZEgGoej6LpeOHWLWYaAm+K2uy0="; }
-      ];
-    };
     clock = {
       out = "/nix/store/hc5jpz12y1lb05g7q74pjxv9qkb8jpgv-velrune-clock-device-aarch64-unknown-linux-gnu-0.1.11";
       recipe = "ci/cross-device.nix"; arg = "clock";
@@ -192,6 +136,55 @@
         name = "messages-source"; narHash = "sha256-+jAxHSvc2uKmVt2vAShYh+PIVy5X/Y3EvPKIJ/PSD3g="; };
       gitSources = [
         { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "16200572e2c7725497dc63725bb1d18866b58862"; narHash = "sha256-v5pzDAf0Ux9E4yy/WS8yxfuKe2DF/pMar0kY82fPie4="; }
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    files = {
+      out = "/nix/store/ina282dqsbjqjxqnbyh1lvz5flsc710d-velrune-files-device-aarch64-unknown-linux-gnu-0.1.13";
+      recipe = "ci/cross-device.nix"; arg = "files";
+      usesDocPlugins = true;
+      src = { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "4541c99b57d26cda2002a93f383c016eced43eae";
+        name = "files-source"; narHash = "sha256-Ul36casXFNv5G8opffbPTco9SoAjKSgAfWRYU9e9ygk="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    docviewer = {
+      out = "/nix/store/xdxhnka9333ijdxzyj88gsw9wmrlpg7z-velrune-docviewer-device-aarch64-unknown-linux-gnu-0.1.7";
+      recipe = "ci/cross-device.nix"; arg = "docviewer";
+      usesDocPlugins = true;
+      src = { url = "https://gitlab.com/velrune/applications/docviewer.git"; rev = "187706d7a5a0b3988cff8d96d162bd541b254a8c";
+        name = "docviewer-source"; narHash = "sha256-Gqu2G0B/8F0btlAK35THxMCsy5vFmAHepeOaUlXJKp0="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "4541c99b57d26cda2002a93f383c016eced43eae"; narHash = "sha256-Ul36casXFNv5G8opffbPTco9SoAjKSgAfWRYU9e9ygk="; }
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/media.git"; rev = "e31a84121c818a2a66cd4f930bc6062b03046157"; narHash = "sha256-U5LNidIPa+imFjZlChjybF8W10D9XHshIAnweVbiYhM="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    gallery = {
+      out = "/nix/store/b7bszhy2xrd5pmgpmq5pwq2j04nf30wr-velrune-gallery-device-aarch64-unknown-linux-gnu-0.1.11";
+      recipe = "ci/cross-device.nix"; arg = "gallery";
+      usesDocPlugins = true;
+      src = { url = "https://gitlab.com/velrune/applications/gallery.git"; rev = "36283c80735f7717063b46ca3450b9b6e0ba2e87";
+        name = "gallery-source"; narHash = "sha256-mE05V0LbfC+Zh6BBx2twrLvaCpkoppv9FAJkILyqLas="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "4541c99b57d26cda2002a93f383c016eced43eae"; narHash = "sha256-Ul36casXFNv5G8opffbPTco9SoAjKSgAfWRYU9e9ygk="; }
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/media.git"; rev = "e31a84121c818a2a66cd4f930bc6062b03046157"; narHash = "sha256-U5LNidIPa+imFjZlChjybF8W10D9XHshIAnweVbiYhM="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    email = {
+      out = "/nix/store/3iskm2i31qgx3gl8y9cyal4zx1iib404-velrune-email-device-aarch64-unknown-linux-gnu-0.1.11";
+      recipe = "ci/cross-device.nix"; arg = "email";
+      src = { url = "https://gitlab.com/velrune/applications/email.git"; rev = "6f4d7c80bcf290839ee6c8d49fafb3426728455a";
+        name = "email-source"; narHash = "sha256-wENTof4iDIumO4m/CH6P+nTLGWrCqRFByy2dXPZmrpI="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "16200572e2c7725497dc63725bb1d18866b58862"; narHash = "sha256-v5pzDAf0Ux9E4yy/WS8yxfuKe2DF/pMar0kY82fPie4="; }
+        { url = "https://gitlab.com/velrune/applications/files-app.git"; rev = "4541c99b57d26cda2002a93f383c016eced43eae"; narHash = "sha256-Ul36casXFNv5G8opffbPTco9SoAjKSgAfWRYU9e9ygk="; }
         { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
         { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
       ];

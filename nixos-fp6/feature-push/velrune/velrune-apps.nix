@@ -40,6 +40,19 @@ let
     if !checkOutputs || pkg.outPath == spec.out then pkg
     else throw "velrune-apps.nix: ${name} evaluates to ${pkg.outPath}, apps.nix records ${spec.out}; rerun gen-apps-nix.py";
 
+  # The shared document plugins: Docviewer's source and every git source the apps pin
+  # (the recipe picks entries by url and revision, so extra entries change nothing).
+  allGitSources = builtins.attrValues (builtins.listToAttrs (map (g: { name = "${g.url}@${g.rev}"; value = g; })
+    (builtins.concatLists (map (a: a.gitSources) (builtins.attrValues data.apps)))));
+  docPlugins = if data ? docPlugins then
+    let src = fetch data.apps.docviewer.src; in
+    check "docPlugins" data.docPlugins (import (src + "/${data.docPlugins.recipe}") {
+      inherit nixpkgsSource;
+      docviewer = src;
+      gitSources = withPaths allGitSources;
+    })
+  else null;
+
   app = name: spec:
     let
       src = fetch spec.src;
@@ -52,7 +65,8 @@ let
       // builtins.mapAttrs (_: extraSource) extras
       // builtins.listToAttrs (map (x: { name = extras.${x}.hashArg; value = extras.${x}.narHash; })
         (builtins.attrNames extras))
-      // (if spec ? package then { inherit (spec) package; } else { });
+      // (if spec ? package then { inherit (spec) package; } else { })
+      // (if spec.usesDocPlugins or false then { inherit docPlugins; } else { });
     in
     check name spec (import (src + "/${spec.recipe}") args);
 

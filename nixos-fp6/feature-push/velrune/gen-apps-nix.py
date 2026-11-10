@@ -170,7 +170,15 @@ def main():
         if key == "shell":
             # Its own nixpkgs pin (ci/flake.lock); velrune-apps.nix reads it from the source.
             extras = []
-        entry = {"key": key, "out": out, "arg": arg, "recipe": recipe,
+        # Files, Docviewer and Gallery take one shared document-plugins package, built from
+        # Docviewer's source (ci/cross-doc-plugins.nix): record the one this build used.
+        doc_plugins = None
+        if re.search(r"\bdocPlugins\b", header):
+            found = [q for q in closure if re.search(r"-velrune-doc-plugins-[^/]*\.drv$", q)]
+            if len(found) != 1:
+                sys.exit(f"{out}: expected one doc-plugins derivation in the closure, found {found}")
+            doc_plugins = run("nix-store", "-q", "--outputs", found[0]).split()[0]
+        entry = {"key": key, "out": out, "arg": arg, "recipe": recipe, "docPlugins": doc_plugins,
                  "src": {"url": url, "rev": rev, "name": src.split("-", 1)[1], "narHash": nar_hash(src)},
                  "gitSources": git, "extras": extras,
                  "package": env["pname"] if env["pname"] == "velrune-consent" else None}
@@ -183,6 +191,13 @@ def main():
     w("# checks that the result is the recorded output path.\n{\n")
     w(f"  nixpkgs = {{ owner = {nix_str(NIXPKGS['owner'])}; repo = {nix_str(NIXPKGS['repo'])};\n"
       f"    rev = {nix_str(NIXPKGS['rev'])}; narHash = {nix_str(NIXPKGS['narHash'])}; }};\n")
+    plugins = sorted({e["docPlugins"] for e in entries if e["docPlugins"]})
+    if len(plugins) > 1:
+        sys.exit(f"the apps use different doc-plugins builds: {plugins}")
+    if plugins:
+        w("  # Built from apps.docviewer's source with ci/cross-doc-plugins.nix; shared by the apps\n")
+        w("  # marked usesDocPlugins, so the system holds one copy.\n")
+        w(f"  docPlugins = {{ out = {nix_str(plugins[0])}; recipe = \"ci/cross-doc-plugins.nix\"; }};\n")
     w("  apps = {\n")
     for e in [e for e in entries if e["key"] != "shell"] + [e for e in entries if e["key"] == "shell"]:
         if e["key"] == "shell":
@@ -192,6 +207,8 @@ def main():
             w(f"    {e['key']} = {{\n")
         w(f"      out = {nix_str(e['out'])};\n")
         w(f"      recipe = {nix_str(e['recipe'])}; arg = {nix_str(e['arg'])};\n")
+        if e["docPlugins"]:
+            w("      usesDocPlugins = true;\n")
         if e["package"]:
             w(f"      package = {nix_str(e['package'])};\n")
         w(f"      src = {{ url = {nix_str(s['url'])}; rev = {nix_str(s['rev'])};\n"

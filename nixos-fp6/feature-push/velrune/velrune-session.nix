@@ -12,7 +12,7 @@
 #    renders the unit as a symlink to /dev/null (masked): Lomiri could then not
 #    be started by hand. It is not used here.
 #  * velrune-session.service: velrune-compositor --backend drm --ui-scale 1.5
-#    as `user` on tty1 with PAMName=login, the shape of nixpkgs'
+#    as `user` on tty1 with PAMName=velrune-session, the shape of nixpkgs'
 #    services/wayland/cage.nix and of the E2-lite run (2026-11-09). It conflicts
 #    with display-manager.service, so starting either one stops the other.
 #    Restart=on-failure with a start limit; past the limit OnFailure only logs
@@ -34,7 +34,7 @@
 #    The launcher exports SLINT_SCALE_FACTOR=1.5 and GRID_UNIT_PX=8 for the
 #    compositor, the Shell and every app they start, and puts
 #    /run/current-system/sw/share first in XDG_DATA_DIRS. The launcher, not
-#    Environment=, sets them: pam_env (PAMName=login) would otherwise put back
+#    Environment=, sets them: pam_env (PAMName=velrune-session) would otherwise put back
 #    Lomiri's GRID_UNIT_PX=24 from /etc/pam/environment.
 #  * Headless parts from phone-os-plan.md section 3: VoLTE at boot (imsd with
 #    AUDIO_USER, polkit rule for the radio group), linger for PipeWire, NetBird
@@ -58,7 +58,7 @@ let
   pinned = import ./velrune-apps.nix { };
 
   # The compositor sets logind's LockedHint while the lock screen is up (--lock-hint auto,
-  # on for --backend drm; needs the logind session PAMName=login opens) and turns the
+  # on for --backend drm; needs the logind session PAMName=velrune-session opens) and turns the
   # screen off and on with the power key itself.
   velruneShell = cfg.shell;
   systemShare = "/run/current-system/sw/share";
@@ -192,7 +192,9 @@ in
       ExecStartPre = "+${pkgs.kbd}/bin/chvt 1";
       ExecStart = launch;
       User = user;
-      PAMName = "login";
+      # Its own PAM service: login's session stack without the ambient CAP_WAKE_ALARM that
+      # pam_systemd gives seat sessions (see security.pam.services.velrune-session).
+      PAMName = "velrune-session";
       Restart = "on-failure";
       RestartSec = "3s";
       # SIGTERM gives the compositor its orderly stop (E2-lite: clean in < 1 s).
@@ -225,6 +227,28 @@ in
   };
 
   environment.sessionVariables.VELRUNE_APPLICATION_MAP = applicationMap;
+
+  # ---- The session's PAM service ---------------------------------------------------------
+  # login's account and session stack (copied option by option, so it follows login), with
+  # one difference: pam_systemd (systemd 261) gives a session on a local seat the ambient
+  # capability CAP_WAKE_ALARM by default, and every process of the session (compositor,
+  # Shell, apps) inherited it. A process with an ambient capability is one a cap-less
+  # process of the same user may not inspect (/proc/<pid>/exe through ptrace's capability
+  # rule), which broke Messages' window identity check. Nothing in the session needs it:
+  # Clock and Reminders use the user manager's timers (WakeSystem= there is the
+  # systemd-user PAM service, unchanged). login itself is unchanged.
+  # pam_systemd parses default-capability-ambient-set= as "set, or with ~ subtract from
+  # the set so far"; an empty value is ignored (the default would still apply), so the set
+  # is emptied by naming the capability and then removing it.
+  security.pam.services.velrune-session =
+    let login = config.security.pam.services.login; in
+    {
+      inherit (login) startSession setLoginUid updateWtmp showMotd allowNullPassword unixAuth setEnvironment limits;
+      rules.session.systemd.args = lib.mkAfter [
+        "default-capability-ambient-set=CAP_WAKE_ALARM"
+        "default-capability-ambient-set=~CAP_WAKE_ALARM"
+      ];
+    };
 
   # ---- Shell PIN lock -----------------------------------------------------------------
   # The Shell's opt-in secure lock checks the user's password through PAM service
