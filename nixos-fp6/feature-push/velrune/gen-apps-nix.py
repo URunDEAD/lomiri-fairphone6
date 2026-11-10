@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Writes velrune/apps.nix: the Velrune apps of the phone, as source pins.
 
-usage: gen-apps-nix.py MIRRORS.json STORE_PATH... > apps.nix
+usage: gen-apps-nix.py MIRRORS STORE_PATH... > apps.nix
+       (MIRRORS: git-mirrors.nix, or a JSON file of the same map)
 
 For each given aarch64 app build (a store path built by its repo's device recipe) this
 reads the build's derivation and records how to rebuild exactly that output from git:
@@ -16,7 +17,7 @@ reads the build's derivation and records how to rebuild exactly that output from
 
 Nothing is guessed: a commit is accepted only when its tree hashes to the NAR hash the
 build used, so evaluating apps.nix gives back the same derivations and output paths.
-MIRRORS.json maps each canonical git URL to a local clone that holds the commits; it is
+MIRRORS maps each canonical git URL to a local clone that holds the commits; it is
 used only to find commits and hash trees, never written into apps.nix.
 """
 import json, os, re, subprocess, sys, tempfile
@@ -114,7 +115,10 @@ def nix_str(s):
 
 
 def main():
-    mirrors = json.load(open(sys.argv[1]))
+    if sys.argv[1].endswith(".nix"):
+        mirrors = json.loads(run("nix-instantiate", "--eval", "--strict", "--json", sys.argv[1]))
+    else:
+        mirrors = json.load(open(sys.argv[1]))
     entries = []
     for out in sys.argv[2:]:
         drv = run("nix-store", "-q", "--deriver", out).strip()

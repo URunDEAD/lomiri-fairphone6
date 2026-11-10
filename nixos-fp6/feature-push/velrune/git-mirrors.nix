@@ -20,6 +20,6 @@
   "https://gitlab.com/velrune/core.git" = "/mnt/data2/Workspace/Velrune/core";
   "https://gitlab.com/velrune/intelligence.git" = "/mnt/data2/Workspace/Velrune/intelligence";
   "https://gitlab.com/velrune/media.git" = "/mnt/data2/Workspace/Velrune/media";
-  "https://gitlab.com/velrune/shell.git" = "/mnt/data2/Workspace/Velrune/.local/teams/os-phone/shell";
+  "https://gitlab.com/velrune/shell.git" = "/mnt/data2/Workspace/Velrune/shell";
   "https://gitlab.com/velrune/velrune-ui.git" = "/mnt/data2/Workspace/Velrune/velrune-ui";
 }
