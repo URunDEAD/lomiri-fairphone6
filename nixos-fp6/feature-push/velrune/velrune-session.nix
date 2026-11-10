@@ -21,17 +21,21 @@
 #  * Power key: the Shell owns it (0.1.25 blanks and wakes the panel). logind
 #    ignores a short press and reboots on a 5 s hold (into whatever boot_b pins); fp6-lomiri-powerd, which also
 #    reads KEY_POWER and drives the backlight, now runs only with Lomiri.
-#  * Shell: one store path, ./shell-path.nix (or --argstr velruneShellPath).
-#  * Apps: no hand list. ExecStartPre (gen-apps.sh) writes format-1 manifests
-#    into /run/user/<uid>/velrune-apps from the org.velrune.*.desktop entries in
-#    ~/.nix-profile at every session start, so installed apps appear without a
-#    rebuild. Interim: the Shell has no .desktop discovery yet (shell-plan T14).
-#    The manifests run the binaries from the user's Nix profile.
-#    Manifests cannot carry environment variables, so the launcher exports
-#    SLINT_SCALE_FACTOR=1.5 and GRID_UNIT_PX=8 for the compositor, the Shell and
-#    every app they start. The launcher, not Environment=, sets them: pam_env
-#    (PAMName=login) would otherwise put back Lomiri's GRID_UNIT_PX=24 from
-#    /etc/pam/environment.
+#  * Shell and apps are packages in the system closure (velrune.session.shell and
+#    velrune.session.apps), by default built from the git pins in ./apps.nix by
+#    ./velrune-apps.nix (each repository's own aarch64 recipe; every source a commit
+#    checked by the NAR hash of its tree; ./gen-apps-nix.py writes apps.nix from the
+#    builds on the phone). No builtins.storePath. The apps are in
+#    environment.systemPackages and services.dbus.packages, so their desktop entries,
+#    share/velrune (ai-actions, plugins) and D-Bus session services come from
+#    /run/current-system/sw, which the Shell reads as system trust (reserved ids such
+#    as `settings` and over-lock calls need it). The Shell discovers desktop entries
+#    itself: no --app-dir and no generated manifests any more.
+#    The launcher exports SLINT_SCALE_FACTOR=1.5 and GRID_UNIT_PX=8 for the
+#    compositor, the Shell and every app they start, and puts
+#    /run/current-system/sw/share first in XDG_DATA_DIRS. The launcher, not
+#    Environment=, sets them: pam_env (PAMName=login) would otherwise put back
+#    Lomiri's GRID_UNIT_PX=24 from /etc/pam/environment.
 #  * Headless parts from phone-os-plan.md section 3: VoLTE at boot (imsd with
 #    AUDIO_USER, polkit rule for the radio group), linger for PipeWire, NetBird
 #    without a graphical agent, packet data kept on, plymouth-quit at boot, and
@@ -49,22 +53,15 @@ let
   uid = config.users.users.${user}.uid;
   home = config.users.users.${user}.home;
 
-  # The Shell build: one store path, options.velrune.shellPath (default ./shell-path.nix,
-  # or --argstr velruneShellPath through trial-velrune-session.nix). builtins.storePath
-  # makes it part of the system closure, so `nix copy` ships it and the phone's GC keeps
-  # it. Needs impure evaluation (nix-instantiate is). The compositor sets logind's
-  # LockedHint while the lock screen is up (--lock-hint auto, on for --backend drm; needs
-  # the logind session PAMName=login opens) and turns the screen off and on with the
-  # power key itself.
-  velruneShell = builtins.storePath config.velrune.shellPath;
+  cfg = config.velrune.session;
+  # Built from ./apps.nix only when an option keeps its default.
+  pinned = import ./velrune-apps.nix { };
 
-  # Rewritten at every session start by the ExecStartPre below from the desktop entries
-  # in the user's profile. Under /run/user: gone at logout, never stale.
-  appDir = "/run/user/${toString uid}/velrune-apps";
-  genApps = pkgs.writeShellScript "velrune-gen-apps" ''
-    export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk ]}
-    ${builtins.readFile ./gen-apps.sh}
-  '';
+  # The compositor sets logind's LockedHint while the lock screen is up (--lock-hint auto,
+  # on for --backend drm; needs the logind session PAMName=login opens) and turns the
+  # screen off and on with the power key itself.
+  velruneShell = cfg.shell;
+  systemShare = "/run/current-system/sw/share";
 
   applicationMap = "${home}/.local/share/velrune/applications.json";
 
@@ -76,17 +73,47 @@ let
     DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString uid}/bus";
   };
 
-  # `env` runs after PAM has set the environment, so these values win.
-  launch = lib.escapeShellArgs ([ "${pkgs.coreutils}/bin/env" ]
-    ++ lib.mapAttrsToList (n: v: "${n}=${v}") sessionEnv
-    ++ [ "${velruneShell}/bin/velrune-compositor" "--backend" "drm" "--ui-scale" "1.5"
-         "--" "--no-catalog" "--app-dir" appDir ]);
+  # Runs after PAM has set the environment, so these values win. XDG_DATA_DIRS keeps
+  # PAM's list (the user profile, for apps not yet in the system) behind the system's.
+  launch = pkgs.writeShellScript "velrune-session-launch" ''
+    export XDG_DATA_DIRS="${systemShare}''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+    exec ${lib.escapeShellArgs ([ "${pkgs.coreutils}/bin/env" ]
+      ++ lib.mapAttrsToList (n: v: "${n}=${v}") sessionEnv
+      ++ [ "${velruneShell}/bin/velrune-compositor" ] ++ cfg.compositorArgs
+      ++ [ "--" ] ++ cfg.shellArgs)}
+  '';
 in
 {
-  options.velrune.shellPath = lib.mkOption {
-    type = lib.types.str;
-    default = import ./shell-path.nix;
-    description = "Store path of the Velrune Shell build (velrune-compositor and velrune-shell).";
+  options.velrune.session = {
+    shell = lib.mkOption {
+      type = lib.types.package;
+      default = pinned.shell;
+      defaultText = lib.literalExpression "(import ./velrune-apps.nix { }).shell";
+      description = "The Velrune Shell build (velrune-compositor and velrune-shell, aarch64).";
+    };
+    compositorArgs = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "--backend" "drm" "--ui-scale" "1.5" "--remote-screenshots" "--remote-input" ];
+      description = "velrune-compositor arguments before `--`.";
+    };
+    shellArgs = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "--no-catalog" ];
+      description = "Shell arguments after `--`. Apps come from the desktop entries in XDG_DATA_DIRS.";
+    };
+    apps = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      # Files, Docviewer and Gallery each ship bin/velrune-docplugin-* and its
+      # share/velrune/doc-plugins entry, and the builds differ; Files' copy wins, as in the
+      # user-profile installer.
+      default = builtins.attrValues (pinned.apps // { files = lib.hiPrio pinned.apps.files; });
+      defaultText = lib.literalExpression "builtins.attrValues (import ./velrune-apps.nix { }).apps (Files at high priority)";
+      description = ''
+        Velrune app packages installed system-wide: desktop entries, share/velrune
+        (ai-actions, plugins), D-Bus session services and launchers under
+        /run/current-system/sw.
+      '';
+    };
   };
 
   config = {
@@ -134,15 +161,7 @@ in
       # compositor ("Failed to disable connectors ... Permission denied",
       # direct_session active=false). Bring tty1 to the foreground first, as root
       # ("+"), before PAM opens the session. At boot it is already tty1: a no-op.
-      #
-      # Then the app dir: manifests from the user's Nix profile (Camera, Chat and new apps
-      # appear after the next session start, no rebuild). Root ("+") because the PAM
-      # session of User= does not exist yet; "-" so a failure leaves the Shell with an
-      # empty launcher instead of no session.
-      ExecStartPre = [
-        "+${pkgs.kbd}/bin/chvt 1"
-        "+-${genApps} ${appDir} ${home}/.nix-profile ${user}"
-      ];
+      ExecStartPre = "+${pkgs.kbd}/bin/chvt 1";
       ExecStart = launch;
       User = user;
       PAMName = "login";
@@ -178,6 +197,19 @@ in
   };
 
   environment.sessionVariables.VELRUNE_APPLICATION_MAP = applicationMap;
+
+  # ---- Velrune apps, system-wide ----------------------------------------------------
+  environment.systemPackages = cfg.apps;
+  # share/velrune: ai-actions (Chat's action discovery), doc-plugins, account-plugins.
+  environment.pathsToLink = [ "/share/velrune" ];
+  # Session-bus activation files (org.velrune.*.service) go into the bus configuration,
+  # so dbus-broker starts the system copies; no per-user links are needed.
+  services.dbus.packages = cfg.apps;
+  # Services the user bus starts run under the user manager, not the session: give it the
+  # system share too, ahead of whatever the user's own environment.d files add.
+  environment.etc."environment.d/40-velrune-system.conf".text = ''
+    XDG_DATA_DIRS=${systemShare}''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}
+  '';
 
   # ---- Power key -----------------------------------------------------------------
   # Short press: the Shell (0.1.25) turns the screen off and on itself, so logind
