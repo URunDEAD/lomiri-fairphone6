@@ -13,6 +13,7 @@
   "https://gitlab.com/velrune/applications/email.git" = "/mnt/data2/Workspace/Velrune/applications/email";
   "https://gitlab.com/velrune/applications/files-app.git" = "/mnt/data2/Workspace/Velrune/applications/files";
   "https://gitlab.com/velrune/applications/gallery.git" = "/mnt/data2/Workspace/Velrune/applications/gallery";
+  "https://gitlab.com/velrune/applications/messages.git" = "/mnt/data2/Workspace/Velrune/applications/messages";
   "https://gitlab.com/velrune/applications/notes.git" = "/mnt/data2/Workspace/Velrune/applications/notes";
   "https://gitlab.com/velrune/applications/phone.git" = "/mnt/data2/Workspace/Velrune/applications/phone";
   "https://gitlab.com/velrune/applications/reminders.git" = "/mnt/data2/Workspace/Velrune/applications/reminders";

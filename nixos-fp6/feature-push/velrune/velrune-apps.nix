@@ -69,5 +69,7 @@ let
 in
 {
   apps = builtins.mapAttrs app data.apps;
+  # Each app's pinned source tree, for parts other than the app itself (Messages' oFono plugin).
+  sources = builtins.mapAttrs (_: spec: fetch spec.src) data.apps;
   shell = shell data.shell;
 }

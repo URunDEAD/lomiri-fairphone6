@@ -35,6 +35,7 @@ APPS = {
     "velrune-email-device": ("email", "https://gitlab.com/velrune/applications/email.git", "email"),
     "velrune-files-device": ("files", "https://gitlab.com/velrune/applications/files-app.git", "files"),
     "velrune-contacts-device": ("contacts", "https://gitlab.com/velrune/applications/contacts.git", "contacts"),
+    "velrune-messages-device": ("messages", "https://gitlab.com/velrune/applications/messages.git", "messages"),
     "velrune-notes-device": ("notes", "https://gitlab.com/velrune/applications/notes.git", "notes"),
     "velrune-calendar-device": ("calendar", "https://gitlab.com/velrune/applications/calendar.git", "calendar"),
     "velrune-clock-device": ("clock", "https://gitlab.com/velrune/applications/clock.git", "clock"),

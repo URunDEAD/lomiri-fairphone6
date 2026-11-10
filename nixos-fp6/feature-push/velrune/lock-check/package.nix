@@ -4,7 +4,7 @@
 { lib, stdenv, linux-pam, systemdLibs, pkg-config, python3 }:
 stdenv.mkDerivation {
   pname = "velrune-lock-check";
-  version = "0.1.0";
+  version = "0.1.1";
   src = lib.fileset.toSource {
     root = ./.;
     fileset = lib.fileset.unions [ ./velrune-lock-check.c ./test_lock_check.py ];

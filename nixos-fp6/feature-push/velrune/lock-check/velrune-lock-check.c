@@ -10,11 +10,14 @@
  *   reply:    one line
  *             "ok"                 the password is right
  *             "fail <remaining>"   wrong; <remaining> more failures before the lockout
- *                                  ("?" if the tally could not be read)
+ *                                  ("?" if the tally could not be read). Only
+ *                                  PAM_AUTH_ERR, PAM_USER_UNKNOWN and PAM_MAXTRIES
+ *                                  count as a wrong password
  *             "locked <seconds>"   pam_faillock locks the account; try again after
  *                                  <seconds> (the right password is refused too)
  *             "error <reason>"     not checked: caller, request or system problem
- *                                  (reasons: caller, request, system)
+ *                                  (reasons: caller, request, system; "system" is any
+ *                                  other PAM result, including pam_start failing)
  *
  * The caller is never asked who to check: the peer's uid (SO_PEERCRED) must be at least
  * 1000 and own the active logind session on seat0, and that user's name is what PAM
@@ -50,7 +53,7 @@
 
 #define MAX_SECRET 256
 #define MIN_UID 1000
-#define READ_TIMEOUT_MS 10000
+#define READ_TIMEOUT_MS 3000
 
 /* pam_faillock's tally record (modules/pam_faillock/faillock.h, linux-pam 1.7). */
 struct tally {
@@ -323,16 +326,19 @@ int main(int argc, char **argv)
 
 	struct pam_conv conv = { conversation, NULL };
 	pam_handle_t *pamh = NULL;
-	int rc;
+	int rc, started_ok;
 #ifdef VELRUNE_LOCK_TESTING
 	if (cfg.confdir)
 		rc = pam_start_confdir(cfg.service, found->pw_name, &conv, cfg.confdir, &pamh);
 	else
 #endif
 		rc = pam_start(cfg.service, found->pw_name, &conv, &pamh);
-	if (rc == PAM_SUCCESS)
+	started_ok = rc == PAM_SUCCESS;
+	if (started_ok)
 		rc = pam_authenticate(pamh, 0);
-	int ok = rc == PAM_SUCCESS;
+	int ok = started_ok && rc == PAM_SUCCESS;
+	/* Only these mean "the password was wrong"; anything else is not the person's fault. */
+	int wrong = started_ok && (rc == PAM_AUTH_ERR || rc == PAM_USER_UNKNOWN || rc == PAM_MAXTRIES);
 	if (pamh)
 		pam_end(pamh, rc);
 	wipe();
@@ -340,6 +346,8 @@ int main(int argc, char **argv)
 	char line[64];
 	if (ok) {
 		snprintf(line, sizeof line, "ok\n");
+	} else if (!wrong) {
+		snprintf(line, sizeof line, "error system\n");
 	} else {
 		long failures;
 		uint64_t latest;

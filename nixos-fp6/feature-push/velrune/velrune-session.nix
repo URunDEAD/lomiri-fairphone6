@@ -49,7 +49,7 @@
 # Build/eval only. Never writes a boot image, slot or partition.
 { config, lib, pkgs, ... }:
 let
-  user = "user";
+  user = config.velrune.session.user;
   uid = config.users.users.${user}.uid;
   home = config.users.users.${user}.home;
 
@@ -64,7 +64,23 @@ let
   systemShare = "/run/current-system/sw/share";
   # pam_faillock tally of the Shell's PIN lock (root-owned, persistent).
   faillockDir = "/var/lib/velrune-lock/faillock";
+  # pam_faillock's settings, used by both the PAM stack and velrune-lock-check's flags.
+  faillockLimits = { deny = 10; unlock_time = 900; fail_interval = 900; };
   lockCheck = pkgs.callPackage ./lock-check/package.nix { };
+
+  # Velrune Messages, when it is among the system apps: its service's user units and the
+  # oFono plugin that spools texts for it (built from the same pinned Messages commit,
+  # against the oFono the phone runs, which loads it through OFONO_PLUGIN_PATH).
+  messages = lib.findFirst (p: (p.pname or "") == "velrune-messages-device") null cfg.apps;
+  smsSpool = pkgs.callPackage "${pinned.sources.messages}/plugins/fp6-sms-spool/package.nix" {
+    ofono = config.system.build.fp6-cellular.ofono;
+  };
+  # The package ships them in share/systemd/user; systemd.packages reads lib/systemd/user.
+  messagesUserUnits = pkgs.runCommand "velrune-messages-user-units" { } ''
+    mkdir -p $out/lib/systemd/user
+    cp ${messages}/share/systemd/user/velrune-messages.service \
+       ${messages}/share/systemd/user/velrune-messages-spool.path $out/lib/systemd/user/
+  '';
   # `faillock` for that folder: sudo velrune-faillock --user user [--reset]
   velruneFaillock = pkgs.writeShellScriptBin "velrune-faillock" ''
     exec ${config.security.pam.package}/bin/faillock --dir ${faillockDir} "$@"
@@ -92,6 +108,11 @@ let
 in
 {
   options.velrune.session = {
+    user = lib.mkOption {
+      type = lib.types.str;
+      default = "user";
+      description = "The person's account: the session user, and the only owner of the PIN-check socket.";
+    };
     shell = lib.mkOption {
       type = lib.types.package;
       default = pinned.shell;
@@ -207,14 +228,15 @@ in
 
   # ---- Shell PIN lock -----------------------------------------------------------------
   # The Shell's opt-in secure lock checks the user's password through PAM service
-  # "velrune-lock": NixOS's default stack, pam_unix through the setuid unix_chkpwd helper
-  # (the Shell runs as `user`). Without the service the secure lock can never open.
+  # "velrune-lock", run as root by velrune-lock-check (below), so pam_unix reads
+  # /etc/shadow (640 root:shadow) through the owner bits, with no capabilities, and does
+  # not need unix_chkpwd. Without the service the secure lock can never open.
   # secure_lock stays off by default in the Shell, so nothing changes until enabled.
   #
   # A durable attempt limit, for this service only (login, sshd, sudo and su are unchanged):
   # pam_faillock preauth, then pam_unix ([success=1 default=bad]), then authfail
-  # ([default=die]) and authsucc (sufficient), Shell-B's tested order. 10 failures lock for
-  # 15 min. The tally lives in a root-owned folder that survives reboots. Not `silent`: the
+  # ([default=die]) and authsucc (sufficient), Shell-B's tested order. faillockLimits:
+  # 10 failures within 15 min lock for 15 min. The tally lives in a root-owned folder that survives reboots. Not `silent`: the
   # Shell reads "The account is locked due to N failed logins" / "(N minutes left to
   # unlock)" (C locale) to show "Too many attempts. Try again in N min."
   # Show / reset by hand: sudo velrune-faillock --user user [--reset]
@@ -230,7 +252,7 @@ in
         faillock = mode: order: control: {
           inherit order control;
           modulePath = "${config.security.pam.package}/lib/security/pam_faillock.so";
-          settings = { ${mode} = true; dir = faillockDir; deny = 10; unlock_time = 900; };
+          settings = { ${mode} = true; dir = faillockDir; } // faillockLimits;
         };
       in
       {
@@ -252,12 +274,15 @@ in
     listenStreams = [ "/run/velrune-lock/check.sock" ];
     socketConfig = {
       Accept = true;
-      SocketUser = "root";
-      SocketGroup = "users";
-      SocketMode = "0660";
+      # Only the person's account may connect: a group (users) would let other accounts
+      # in it crowd out the real user with root forks.
+      SocketUser = user;
+      SocketGroup = "root";
+      SocketMode = "0600";
       DirectoryMode = "0755";
-      # Attempts are serialized by the helper; this only bounds waiting processes.
-      MaxConnections = 4;
+      # Attempts are serialized by the helper; these only bound waiting processes.
+      MaxConnections = 8;
+      MaxConnectionsPerSource = 2;
     };
   };
   systemd.services."velrune-lock-check@" = {
@@ -266,7 +291,10 @@ in
       ExecStart = lib.escapeShellArgs [
         "${lockCheck}/bin/velrune-lock-check"
         "--service" "velrune-lock"
-        "--dir" faillockDir "--deny" "10" "--unlock-time" "900" "--fail-interval" "900"
+        "--dir" faillockDir
+        "--deny" (toString faillockLimits.deny)
+        "--unlock-time" (toString faillockLimits.unlock_time)
+        "--fail-interval" (toString faillockLimits.fail_interval)
         "--lock-file" "/var/lib/velrune-lock/attempt.lock" "--min-fail-ms" "2000"
       ];
       StandardInput = "socket";
@@ -275,6 +303,8 @@ in
       StateDirectory = "velrune-lock";
       StateDirectoryMode = "0700";
       RuntimeMaxSec = 60;
+      # It handles a password: never write a core dump.
+      LimitCORE = 0;
       UMask = "0077";
       # Root for /etc/shadow (owner read) and the tally; no capabilities at all.
       CapabilityBoundingSet = "";
@@ -305,6 +335,19 @@ in
       SystemCallErrorNumber = "EPERM";
     };
   };
+
+  # ---- Messages: SMS spool and service (plugins/fp6-sms-spool/README.md) --------------
+  # oFono writes every received SMS and every send status into the spool before anything
+  # can lose it; velrune-messages-service (user unit, lingering) applies and deletes them.
+  # Adding the plugin changes ofono.service's environment, so activation restarts oFono:
+  # a call in progress drops and fp6-ims-pdn/imsd go down with it (see the runbook).
+  services.ofono.plugins = lib.mkIf (messages != null) [ smsSpool ];
+  users.groups.velrune-sms = { };
+  # (the user joins group velrune-sms below, with linger)
+  systemd.tmpfiles.rules = [ "d /var/lib/fp6-sms-spool 2770 root velrune-sms -" ];
+  systemd.packages = lib.optional (messages != null) messagesUserUnits;
+  systemd.user.services.velrune-messages = lib.mkIf (messages != null) { wantedBy = [ "default.target" ]; };
+  systemd.user.paths.velrune-messages-spool = lib.mkIf (messages != null) { wantedBy = [ "default.target" ]; };
 
   # ---- Velrune apps, system-wide ----------------------------------------------------
   environment.systemPackages = cfg.apps ++ [ velruneFaillock ];
@@ -358,7 +401,8 @@ in
   # ---- PipeWire and VoLTE without Lomiri (plan section 3) --------------------
   # PipeWire is a user service; linger starts the user manager at boot, before
   # (and independently of) the Velrune session.
-  users.users.${user}.linger = true;
+  # velrune-sms: read and delete the SMS spool (Messages, above).
+  users.users.${user} = { linger = true; extraGroups = [ "velrune-sms" ]; };
   services.fp6Ims.autoStart = true;
   # fp6-ims-pdn exits 1 on purpose when the IMS call drops or rmnet_ims vanishes
   # ("exiting for a restart", seen once during activation) and relies on systemd.

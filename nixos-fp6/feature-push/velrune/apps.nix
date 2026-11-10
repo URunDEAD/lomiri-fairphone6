@@ -6,19 +6,6 @@
   nixpkgs = { owner = "NixOS"; repo = "nixpkgs";
     rev = "31ecbaca1bdefa45dffc409f0250bd8039ea0010"; narHash = "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM="; };
   apps = {
-    phone = {
-      out = "/nix/store/i6svgkzvff9zggzmx8r7vcpk8b5lwbmk-velrune-phone-app-aarch64-unknown-linux-gnu-0.1.50";
-      recipe = "ci/cross-phone-app.nix"; arg = "phone";
-      src = { url = "https://gitlab.com/velrune/applications/phone.git"; rev = "6aaaf0bee1457d0dfcd23bdf3af8f358469ec2ce";
-        name = "phone-source"; narHash = "sha256-Uv+8nimmd6Mnfjdmbqdu5e5Xtl5yVx4av10iX2QmTcA="; };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "16200572e2c7725497dc63725bb1d18866b58862"; narHash = "sha256-v5pzDAf0Ux9E4yy/WS8yxfuKe2DF/pMar0kY82fPie4="; }
-        { url = "https://gitlab.com/velrune/applications/notes.git"; rev = "a019e9ed90b483dcb5e1f7dae7aecc2a6399cdef"; narHash = "sha256-L/rPF87ucBrBo5s/zXbsyUgUdtEox6egy60q+PxuTR4="; }
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/intelligence.git"; rev = "ca93a2c8704ff0f4d27fb82f3e607a72a2396f01"; narHash = "sha256-u0P14fNW8lpx/3hZhl/wEsIbyZWrczo/800CHAaTP+w="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
     docviewer = {
       out = "/nix/store/k1w9xm2wykqqpxrmmjdg5kyagjiff9dw-velrune-docviewer-device-aarch64-unknown-linux-gnu-0.1.5";
       recipe = "ci/cross-device.nix"; arg = "docviewer";
@@ -78,52 +65,11 @@
         { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "c5f991336fdd7a215900ee12f13e379c105f850a"; narHash = "sha256-YeHvQXLC+x0kFZQflZEgGoej6LpeOHWLWYaAm+K2uy0="; }
       ];
     };
-    contacts = {
-      out = "/nix/store/0jxh8phyydm7s38imslgavnl6misan6h-velrune-contacts-device-aarch64-unknown-linux-gnu-0.1.7";
-      recipe = "ci/cross-device.nix"; arg = "contacts";
-      src = { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "16200572e2c7725497dc63725bb1d18866b58862";
-        name = "contacts-source"; narHash = "sha256-v5pzDAf0Ux9E4yy/WS8yxfuKe2DF/pMar0kY82fPie4="; };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
-    notes = {
-      out = "/nix/store/hdxx2zyvccs90qy1f159qiqlcqzn6g2l-velrune-notes-device-aarch64-unknown-linux-gnu-0.1.18";
-      recipe = "ci/cross-device.nix"; arg = "notes";
-      src = { url = "https://gitlab.com/velrune/applications/notes.git"; rev = "a019e9ed90b483dcb5e1f7dae7aecc2a6399cdef";
-        name = "notes-source"; narHash = "sha256-L/rPF87ucBrBo5s/zXbsyUgUdtEox6egy60q+PxuTR4="; };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/intelligence.git"; rev = "ca93a2c8704ff0f4d27fb82f3e607a72a2396f01"; narHash = "sha256-u0P14fNW8lpx/3hZhl/wEsIbyZWrczo/800CHAaTP+w="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
-    calendar = {
-      out = "/nix/store/wqsyksw3arfyrc3nyjbknszr0az0q2xm-velrune-calendar-device-aarch64-unknown-linux-gnu-0.1.8";
-      recipe = "ci/cross-device.nix"; arg = "calendar";
-      src = { url = "https://gitlab.com/velrune/applications/calendar.git"; rev = "c01b44cf6e85e7d22386a7ff3b4110c9a52c2b2e";
-        name = "calendar-source"; narHash = "sha256-ubN6nrcvLI41sjn3S6sKAJS3s1TPQ/tmwnxUFgaecMg="; };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
     clock = {
       out = "/nix/store/hc5jpz12y1lb05g7q74pjxv9qkb8jpgv-velrune-clock-device-aarch64-unknown-linux-gnu-0.1.11";
       recipe = "ci/cross-device.nix"; arg = "clock";
       src = { url = "https://gitlab.com/velrune/applications/clock.git"; rev = "cd9ea1d3b3a933f8f4aeba431709080333718550";
         name = "clock-source"; narHash = "sha256-oBc18f/G9lW4AbKI2Bv6IGDxr8b07c2emCv9RytEGTE="; };
-      gitSources = [
-        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
-      ];
-    };
-    reminders = {
-      out = "/nix/store/mk4715yg4bnj45ahvy5r0jh4dwx4w22i-velrune-reminders-device-aarch64-unknown-linux-gnu-0.1.9";
-      recipe = "ci/cross-device.nix"; arg = "reminders";
-      src = { url = "https://gitlab.com/velrune/applications/reminders.git"; rev = "1f824626125d010d0e8089529277a88ee8fa02ec";
-        name = "reminders-source"; narHash = "sha256-jiO3f09fPvMI6mop1QLXmF+fNXPVZlWKgmfc9TrzAds="; };
       gitSources = [
         { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
         { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
@@ -183,6 +129,70 @@
       gitSources = [
         { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
         { url = "https://gitlab.com/velrune/intelligence.git"; rev = "1ac762634ad6cd678fa97a417a0ff86bd996c1b8"; narHash = "sha256-UuZgWR8+MQirUX0pGnWi0buIbtJ/RLhNJ82WQ+7z1A4="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    phone = {
+      out = "/nix/store/b8gscv8x4mfrynbfsil0qjafyr81f99m-velrune-phone-app-aarch64-unknown-linux-gnu-0.1.52";
+      recipe = "ci/cross-phone-app.nix"; arg = "phone";
+      src = { url = "https://gitlab.com/velrune/applications/phone.git"; rev = "58ac104a550276c529ffa1be48f464cbb64c7a4d";
+        name = "phone-source"; narHash = "sha256-OB1v8kq/vpG0TrbTCfY8rYdui6Ntj1F2XCGRA89GbuY="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "16200572e2c7725497dc63725bb1d18866b58862"; narHash = "sha256-v5pzDAf0Ux9E4yy/WS8yxfuKe2DF/pMar0kY82fPie4="; }
+        { url = "https://gitlab.com/velrune/applications/notes.git"; rev = "a019e9ed90b483dcb5e1f7dae7aecc2a6399cdef"; narHash = "sha256-L/rPF87ucBrBo5s/zXbsyUgUdtEox6egy60q+PxuTR4="; }
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/intelligence.git"; rev = "ca93a2c8704ff0f4d27fb82f3e607a72a2396f01"; narHash = "sha256-u0P14fNW8lpx/3hZhl/wEsIbyZWrczo/800CHAaTP+w="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    contacts = {
+      out = "/nix/store/wlqlgb1w79iv4dik6yvxayyygyff4byl-velrune-contacts-device-aarch64-unknown-linux-gnu-0.1.10";
+      recipe = "ci/cross-device.nix"; arg = "contacts";
+      src = { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "edb369cf8662517a3dd250e0b9382058db01f2d8";
+        name = "contacts-source"; narHash = "sha256-i0gvpz1IwLvKvxPa0mSYVYtzO1ftcmFwlb2mPehkLBA="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    notes = {
+      out = "/nix/store/d21y0biidnw0901mv01zwc2sdmxxh06x-velrune-notes-device-aarch64-unknown-linux-gnu-0.1.20";
+      recipe = "ci/cross-device.nix"; arg = "notes";
+      src = { url = "https://gitlab.com/velrune/applications/notes.git"; rev = "4f9a8de315982df57522a21d83ac82d956374871";
+        name = "notes-source"; narHash = "sha256-a7di7gWn1lddG1fDJTCxqVdgxnimIvaC1XR78kg5+qA="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    calendar = {
+      out = "/nix/store/ky7qw69q8j8v6hk7m6my9955b9wrv0c2-velrune-calendar-device-aarch64-unknown-linux-gnu-0.1.9";
+      recipe = "ci/cross-device.nix"; arg = "calendar";
+      src = { url = "https://gitlab.com/velrune/applications/calendar.git"; rev = "3b6cf2d28dbe3d4908afc0b4e6feeddf201df715";
+        name = "calendar-source"; narHash = "sha256-Ai8mXbetDlfkw00YaJgoCm4czP1WKpl8M4Y11999Y0U="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    reminders = {
+      out = "/nix/store/r02fnxb810zr8bcx32vszw53bfni88x7-velrune-reminders-device-aarch64-unknown-linux-gnu-0.1.10";
+      recipe = "ci/cross-device.nix"; arg = "reminders";
+      src = { url = "https://gitlab.com/velrune/applications/reminders.git"; rev = "35c6b9b87aee3d5dc29b7c3415a785e54991661b";
+        name = "reminders-source"; narHash = "sha256-Lr60ZUxqjuwl2uypvm3VoGqAmDyMQqpN1A8NKojGBdE="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
+      ];
+    };
+    messages = {
+      out = "/nix/store/4vpx2341m7zmcin4dqmwicjbrqcxm1a6-velrune-messages-device-aarch64-unknown-linux-gnu-0.1.2";
+      recipe = "ci/cross-device.nix"; arg = "messages";
+      src = { url = "https://gitlab.com/velrune/applications/messages.git"; rev = "5db92b48e91277fe10265a0b3cf2abecf837e96d";
+        name = "messages-source"; narHash = "sha256-+jAxHSvc2uKmVt2vAShYh+PIVy5X/Y3EvPKIJ/PSD3g="; };
+      gitSources = [
+        { url = "https://gitlab.com/velrune/applications/contacts.git"; rev = "16200572e2c7725497dc63725bb1d18866b58862"; narHash = "sha256-v5pzDAf0Ux9E4yy/WS8yxfuKe2DF/pMar0kY82fPie4="; }
+        { url = "https://gitlab.com/velrune/core.git"; rev = "e613633737add26cda79415e232cd0ff729ff284"; narHash = "sha256-xWnl+S4FilOhqwNXXjr7oIngKmFqQLm9ftxTSkXu4UY="; }
         { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "50c75e29f12755f11cf946344bb32f71d141e3c1"; narHash = "sha256-HZv93pJGfjm/eAs9OOE9b3f2ID7Oko6Fw+2X4Xxgq7k="; }
       ];
     };
