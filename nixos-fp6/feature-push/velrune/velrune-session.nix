@@ -67,6 +67,16 @@ let
   # pam_faillock's settings, used by both the PAM stack and velrune-lock-check's flags.
   faillockLimits = { deny = 10; unlock_time = 900; fail_interval = 900; };
   lockCheck = pkgs.callPackage ./lock-check/package.nix { };
+  # systemd's graphical.target without Wants=display-manager.service (see "Lomiri off").
+  graphicalTarget = pkgs.writeTextDir "lib/systemd/system/graphical.target" ''
+    [Unit]
+    Description=Graphical Interface
+    Documentation=man:systemd.special(7)
+    Requires=multi-user.target
+    Conflicts=rescue.service rescue.target
+    After=multi-user.target rescue.service rescue.target display-manager.service
+    AllowIsolate=yes
+  '';
   imsRecover = pkgs.callPackage ./ims-recover/package.nix { };
 
   # Velrune Messages, when it is among the system apps: its service's user units and the
@@ -150,6 +160,19 @@ in
 
   # ---- Lomiri off at boot, still startable by hand ----------------------------
   systemd.defaultUnit = lib.mkForce "multi-user.target";
+  # Nothing may start Lomiri automatically in this generation. Upstream graphical.target
+  # has Wants=display-manager.service, and on a phone booted into the Lomiri boot_b
+  # generation graphical.target stays active after `switch-to-configuration test`, which
+  # starts every active target again: live, the 5e->5f activation started display-manager
+  # (and with it fp6-lomiri-powerd, the greeter and its telephony side), which re-read the
+  # SIM, re-registered the modem in NetworkManager and ended the IMS PDN (internal/218).
+  # So this generation ships its own graphical.target, identical except for that Wants=,
+  # and nothing is wanted by it (accounts-daemon is D-Bus activated anyway). Lomiri by hand
+  # still works: `systemctl stop velrune-session; systemctl start display-manager`.
+  # The Lomiri boot_b generation is a different closure and is untouched.
+  systemd.suppressedSystemUnits = [ "graphical.target" ];
+  # (graphicalTarget is in systemd.packages, with Messages' user units below.)
+  systemd.services.accounts-daemon.wantedBy = lib.mkForce [ ];
   # boot-splash-fp6.nix leaves plymouth-quit to LightDM; nothing else would quit it.
   systemd.services.plymouth-quit.wantedBy = lib.mkForce [ "multi-user.target" ];
 
@@ -370,7 +393,7 @@ in
   users.groups.velrune-sms = { };
   # (the user joins group velrune-sms below, with linger)
   systemd.tmpfiles.rules = [ "d /var/lib/fp6-sms-spool 2770 root velrune-sms -" ];
-  systemd.packages = lib.optional (messages != null) messagesUserUnits;
+  systemd.packages = [ graphicalTarget ] ++ lib.optional (messages != null) messagesUserUnits;
   systemd.user.services.velrune-messages = lib.mkIf (messages != null) { wantedBy = [ "default.target" ]; };
   systemd.user.paths.velrune-messages-spool = lib.mkIf (messages != null) { wantedBy = [ "default.target" ]; };
 
