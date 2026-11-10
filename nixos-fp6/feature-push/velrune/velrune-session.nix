@@ -78,6 +78,16 @@ let
     AllowIsolate=yes
   '';
   imsRecover = pkgs.callPackage ./ims-recover/package.nix { };
+  uimStamp = "/run/msm-modem-uim-selection.done";
+  # ExecCondition of msm-modem-uim-selection: 0 = run, 1 = skip.
+  uimNeeded = pkgs.writeShellScript "msm-modem-uim-selection-needed" ''
+    [ -e ${uimStamp} ] || exit 0
+    status=$(${pkgs.coreutils}/bin/timeout -k 5 20 ${pkgs.libqmi}/bin/qmicli --silent -d qrtr://0 --uim-get-card-status 2>/dev/null) || exit 1
+    case "$status" in
+      *"Primary GW:   session doesn't exist"*) exit 0 ;;
+      *) exit 1 ;;
+    esac
+  '';
 
   # Velrune Messages, when it is among the system apps: its service's user units and the
   # oFono plugin that spools texts for it (built from the same pinned Messages commit,
@@ -473,6 +483,39 @@ in
   # next boot, or when the runbook's post-activation step restarts them on purpose:
   # restart ofono fp6-ofono-online fp6-ofono-data-on; reset-failed; start fp6-ims-pdn imsd.
   systemd.services.ofono.restartIfChanged = false;
+  # The modem's own boot units likewise (audit in reports/team-os.md, revision 5h): a
+  # restart of rmtfs or tqftpserv resets the modem's file or TFTP service, MCFG activation
+  # and the UIM session selection touch the modem's configuration and SIM session.
+  systemd.services.rmtfs.restartIfChanged = false;
+  systemd.services.tqftpserv.restartIfChanged = false;
+  systemd.services.fp6-modem-mcfg-activate.restartIfChanged = false;
+  systemd.services.fp6-rmtfs-shadow-confirm.restartIfChanged = false;
+  systemd.services.fp6-loc-engine-lock.restartIfChanged = false;
+  systemd.services.qbootctl.restartIfChanged = false;
+  # msm-modem-uim-selection resets an existing primary GW provisioning session "once" and
+  # selects it again, which drops every PDN (live: 11:37 and 12:04, IMS call end
+  # internal/218, NM MODEM_PPP_FAILED). It exited after running, so every `test`
+  # activation started it again through multi-user.target. Now: once per boot.
+  #  * RemainAfterExit: it stays active, so restarting targets does not run it again;
+  #  * a stamp in /run marks "this boot selected a session" (written after a successful
+  #    run, and by activation on a system that is already up with oFono running);
+  #  * ExecCondition: with the stamp, run only if the modem reports no primary GW session
+  #    (read-only card status), so a lost session is still restored, an existing one never
+  #    reset again.
+  systemd.services.msm-modem-uim-selection = {
+    restartIfChanged = false;
+    serviceConfig = {
+      RemainAfterExit = true;
+      ExecCondition = "${uimNeeded}";
+      ExecStartPost = "${pkgs.coreutils}/bin/touch ${uimStamp}";
+    };
+  };
+  system.activationScripts.velrune-uim-stamp = ''
+    # Only on a running system (a switch): at boot, systemd is not up yet and the unit runs.
+    if [ -d /run/systemd/system ] && ${pkgs.systemd}/bin/systemctl -q is-active ofono.service; then
+      ${pkgs.coreutils}/bin/touch ${uimStamp}
+    fi
+  '';
   systemd.services.fp6-ofono-online.restartIfChanged = false;
   systemd.services.fp6-ofono-data-on.restartIfChanged = false;
   systemd.services.fp6-ims-pdn.restartIfChanged = false;
@@ -503,15 +546,18 @@ in
       RestartSec = lib.mkForce "20s";
     };
   };
+  # The OnFailure= job only hands the work to a transient unit and returns: doing the
+  # restarts inside the OnFailure transaction met "Requested transaction contradicts
+  # existing jobs: Resource deadlock avoided" live (12:04). One run per trigger at a time
+  # (the transient unit's name); the script schedules its own retries (transient timers
+  # fp6-ims-recover-retry-<trigger>), all bounded by this unit's start limit.
   systemd.services."fp6-ims-recover@" = {
     description = "Recover VoLTE after %i failed (PDN, or oFono then PDN)";
     startLimitIntervalSec = 3600;
     startLimitBurst = 6;
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${imsRecover}/bin/fp6-ims-recover %i";
-      # Starting the PDN waits for its PS attach (up to 300 s) and StartNetwork.
-      TimeoutStartSec = 600;
+      ExecStart = "-${pkgs.systemd}/bin/systemd-run --no-block --collect --unit=fp6-ims-recover-run-%i --property=TimeoutStartSec=1200 ${imsRecover}/bin/fp6-ims-recover %i";
     };
   };
   systemd.tmpfiles.settings."40-fp6-ims-recover"."/run/fp6-ims-recover".d = { user = "root"; group = "root"; mode = "0700"; };
