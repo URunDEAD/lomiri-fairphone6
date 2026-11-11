@@ -93,6 +93,20 @@ let
   # oFono plugin that spools texts for it (built from the same pinned Messages commit,
   # against the oFono the phone runs, which loads it through OFONO_PLUGIN_PATH).
   messages = lib.findFirst (p: (p.pname or "") == "velrune-messages-device") null cfg.apps;
+  # Capture records through a `gst-launch-1.0` child (reports/team-capture.md).
+  capture = lib.findFirst (p: (p.pname or "") == "velrune-capture-device") null cfg.apps;
+  # Its plugin search path: core (fdsrc, queue), base, good (vp9enc, webmmux, mp4mux),
+  # bad (openh264enc, h264parse) and pipewiresrc from the daemon's own PipeWire.
+  # A store path, not /run/current-system/sw: GStreamer's registry cache keys plugins
+  # on path, size and mtime, and store mtimes never change, so an upgrade must move it.
+  gstPlugins = pkgs.buildEnv {
+    name = "velrune-gstreamer-plugins";
+    paths = with pkgs.gst_all_1; [
+      gstreamer.out gst-plugins-base gst-plugins-good gst-plugins-bad
+      config.services.pipewire.package
+    ];
+    pathsToLink = [ "/lib/gstreamer-1.0" ];
+  };
   smsSpool = pkgs.callPackage "${pinned.sources.messages}/plugins/fp6-sms-spool/package.nix" {
     ofono = config.system.build.fp6-cellular.ofono;
   };
@@ -152,6 +166,16 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ "--no-catalog" ];
       description = "Shell arguments after `--`. Apps come from the desktop entries in XDG_DATA_DIRS.";
+    };
+    gstreamer = lib.mkOption {
+      type = lib.types.bool;
+      default = capture != null;
+      defaultText = lib.literalExpression "Capture is in velrune.session.apps";
+      description = ''
+        GStreamer for app pipelines run as child processes: gst-launch-1.0 on PATH and
+        GST_PLUGIN_SYSTEM_PATH_1_0 set for the session to core, base, good, bad and
+        PipeWire's plugins.
+      '';
     };
     apps = lib.mkOption {
       type = lib.types.listOf lib.types.package;
@@ -263,7 +287,13 @@ in
     };
   };
 
-  environment.sessionVariables.VELRUNE_APPLICATION_MAP = applicationMap;
+  environment.sessionVariables = {
+    VELRUNE_APPLICATION_MAP = applicationMap;
+  } // lib.optionalAttrs cfg.gstreamer {
+    # The session gets it through pam_env (velrune-session PAM service), the Shell
+    # passes it on to the apps it starts.
+    GST_PLUGIN_SYSTEM_PATH_1_0 = "${gstPlugins}/lib/gstreamer-1.0";
+  };
 
   # ---- The session's PAM service ---------------------------------------------------------
   # login's account and session stack (copied option by option, so it follows login), with
@@ -412,7 +442,8 @@ in
 
   # ---- Velrune apps, system-wide ----------------------------------------------------
   # pkgs.ladspaPlugins: the Shell's output limiter (see "Audio" below).
-  environment.systemPackages = cfg.apps ++ [ velruneFaillock pkgs.ladspaPlugins ];
+  environment.systemPackages = cfg.apps ++ [ velruneFaillock pkgs.ladspaPlugins ]
+    ++ lib.optional cfg.gstreamer pkgs.gst_all_1.gstreamer.bin;   # gst-launch-1.0
   # share/velrune: ai-actions (Chat's action discovery), doc-plugins, account-plugins,
   # network-plugins. lib/ladspa: the Shell's limiter.
   environment.pathsToLink = [ "/share/velrune" "/lib/ladspa" ];
