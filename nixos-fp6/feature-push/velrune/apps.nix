@@ -113,14 +113,14 @@
       ];
     };
     chat = {
-      out = "/nix/store/yaj3v1g93ix7ipgyxvpn0qxzc810a7qj-velrune-chat-aarch64-unknown-linux-gnu-0.1.14";
+      out = "/nix/store/m0s3ckfbf4blm0yhkm5xc9gp677mi2a4-velrune-chat-aarch64-unknown-linux-gnu-0.1.16";
       recipe = "ci/cross-phone.nix"; arg = "chat";
-      src = { url = "https://gitlab.com/velrune/applications/chat.git"; rev = "c164c0825b5a215185b4382ba8ba41364c8a16f0";
-        name = "chat-c164c08"; narHash = "sha256-MEI33gqJWP86fZeZpFRo8bsN+sGr4j5eBoEcZHtDO3A="; };
+      src = { url = "https://gitlab.com/velrune/applications/chat.git"; rev = "c978aaaa194ac9c0eaca06c63b88c34174ea38d4";
+        name = "chat-c978aaa"; narHash = "sha256-auHmYp2HuhdZtYLMZ3Yb/bQ2afum6s7we0sJr9chWKk="; };
       gitSources = [
         { url = "https://gitlab.com/velrune/core.git"; rev = "8421325b0d39b7d19b7844b665756d2fbb9a999b"; narHash = "sha256-QUDFzw7M+guqmdXUh/WXyyi1TBeYGsy73XDCs+8Sie8="; }
-        { url = "https://gitlab.com/velrune/intelligence.git"; rev = "02ff50af97c9efb0f95cba7cdb1d3ace333e20f7"; narHash = "sha256-UszoQFbaFC1aCN6w8rKj4jNIHwUYNnMiJ9cQCEBmFrs="; }
-        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "42d3ef255fbc26d368ee0bc43b304e4d6ebacda3"; narHash = "sha256-ZWYUztdddrYtbCfNmabcXosS5Fao+6dJCq4+EgatjTI="; }
+        { url = "https://gitlab.com/velrune/intelligence.git"; rev = "bbceaafbbfe29b4b22e66c9ea7585555ecf2ff90"; narHash = "sha256-cRZF4REP96w0FET6bWtiPuhZe7VBnrNvvdTNwmDZ/XE="; }
+        { url = "https://gitlab.com/velrune/velrune-ui.git"; rev = "23c65465be62a3b394f94d76c71f153adbd8c122"; narHash = "sha256-vIQ+J9c9ePN1thr2c7h1u758wkWMbvsCRRi+JTag0XQ="; }
       ];
     };
     consent = {
