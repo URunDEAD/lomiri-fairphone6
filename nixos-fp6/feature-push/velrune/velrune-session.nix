@@ -128,6 +128,9 @@ let
   '';
 in
 {
+  # velrune.network.plugins: NetworkManager VPN plugins + Settings' manifests.
+  imports = [ ./velrune-network-plugins.nix ];
+
   options.velrune.session = {
     user = lib.mkOption {
       type = lib.types.str;
@@ -408,12 +411,26 @@ in
   systemd.user.paths.velrune-messages-spool = lib.mkIf (messages != null) { wantedBy = [ "default.target" ]; };
 
   # ---- Velrune apps, system-wide ----------------------------------------------------
-  environment.systemPackages = cfg.apps ++ [ velruneFaillock ];
-  # share/velrune: ai-actions (Chat's action discovery), doc-plugins, account-plugins.
-  environment.pathsToLink = [ "/share/velrune" ];
+  # pkgs.ladspaPlugins: the Shell's output limiter (see "Audio" below).
+  environment.systemPackages = cfg.apps ++ [ velruneFaillock pkgs.ladspaPlugins ];
+  # share/velrune: ai-actions (Chat's action discovery), doc-plugins, account-plugins,
+  # network-plugins. lib/ladspa: the Shell's limiter.
+  environment.pathsToLink = [ "/share/velrune" "/lib/ladspa" ];
   # Session-bus activation files (org.velrune.*.service) go into the bus configuration,
   # so dbus-broker starts the system copies; no per-user links are needed.
   services.dbus.packages = cfg.apps;
+
+  # ---- Network connection-type plugins (rev5j) ---------------------------------------
+  # Manifests from the pinned Settings' share/settings/network-plugins catalog.
+  velrune.network.plugins = [ "wireguard" "openvpn" ];
+
+  # ---- Audio: the Shell's output limiter (rev5j) -------------------------------------
+  # Shell >= 0.1.133 runs its own `pipewire -c` filter-chain with swh-plugins'
+  # fast_lookahead_limiter_1913.so. It looks on LADSPA_PATH, then in
+  # /run/current-system/sw/lib/ladspa, and passes PipeWire the absolute path,
+  # which PipeWire 1.6 loads directly (plugin_ladspa.c, path[0] == '/'), so no
+  # LADSPA_PATH is needed for the PipeWire user units. pkgs.ladspaPlugins is in
+  # environment.systemPackages and /lib/ladspa in environment.pathsToLink above.
   # Services the user bus starts run under the user manager, not the session: give it the
   # system share too, ahead of whatever the user's own environment.d files add.
   environment.etc."environment.d/40-velrune-system.conf".text = ''
