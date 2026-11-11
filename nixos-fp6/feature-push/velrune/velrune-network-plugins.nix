@@ -24,7 +24,11 @@ let
   cfg = config.velrune.network;
 
   # Built without the GNOME editor (libnma, GTK): Settings renders the editor.
-  noGnome = p: p.override { withGnome = false; };
+  # nixpkgs keeps glib only in nativeBuildInputs; with GNOME it arrives through
+  # gtk3/libnma, without it configure finds no glib-2.0 (seen with openvpn).
+  noGnome = p: (p.override { withGnome = false; }).overrideAttrs (old: {
+    buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.glib ];
+  });
 
   settings = lib.findFirst
     (p: (p.pname or "") == "velrune-settings-device")
