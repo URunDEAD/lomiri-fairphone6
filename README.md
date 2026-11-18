@@ -1,4 +1,14 @@
-# fairphone6-nixos
+# lomiri-fairphone6
+
+> **Repository split (2026-11-18).** This is the original all-in-one Fairphone 6 port, formerly `fairphone6-nixos`. It now continues as the **Lomiri / Mir / Phosh / Ubuntu Touch app** integration. The other layers moved:
+>
+> | Repository | Role |
+> |---|---|
+> | [linux-fairphone6](https://github.com/URunDEAD/linux-fairphone6) | Linux hardware enablement: kernel, drivers, device tree, ALSA/libcamera, modem helpers |
+> | [nixos-fairphone6](https://github.com/URunDEAD/nixos-fairphone6) | Desktop-neutral NixOS / Mobile NixOS layer (the renamed original repository; tag `lomiri-final` = this repository's starting point) |
+> | **lomiri-fairphone6** (this) | Lomiri shell, Phosh and the app set on top of the NixOS port |
+>
+> The tree below is still the complete original port, including its own copies of the kernel and NixOS recipes, so it keeps building as before. New hardware work goes to linux-fairphone6 and new NixOS-layer work to nixos-fairphone6.
 
 **NixOS on the Fairphone (Gen. 6)** (SM7635 / "milos"), built with
 [Mobile NixOS](https://github.com/mobile-nixos/mobile-nixos), running the
