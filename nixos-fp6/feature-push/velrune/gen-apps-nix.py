@@ -17,8 +17,10 @@ reads the build's derivation and records how to rebuild exactly that output from
 
 Nothing is guessed: a commit is accepted only when its tree hashes to the NAR hash the
 build used, so evaluating apps.nix gives back the same derivations and output paths.
-MIRRORS maps each canonical git URL to a local clone that holds the commits; it is
-used only to find commits and hash trees, never written into apps.nix.
+MIRRORS maps each fetch URL (GitHub) to a local clone that holds the commits; it is
+used only to find commits and hash trees, never written into apps.nix. An app's own
+source and extras are recorded by their GitHub URL; gitSources keep the URL their
+Cargo.lock names (still gitlab.com/velrune/...), which source-hosts.nix maps to GitHub.
 """
 import json, os, re, subprocess, sys, tempfile
 
@@ -26,31 +28,31 @@ NIXPKGS = {"owner": "NixOS", "repo": "nixpkgs",
            "rev": "31ecbaca1bdefa45dffc409f0250bd8039ea0010",
            "narHash": "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM="}
 
-# pname -> (app key, canonical url of the app's repository, recipe argument name)
+# pname -> (app key, GitHub url of the app's repository, recipe argument name)
 APPS = {
-    "velrune-chat": ("chat", "https://gitlab.com/velrune/applications/chat.git", "chat"),
-    "velrune-phone-app": ("phone", "https://gitlab.com/velrune/applications/phone.git", "phone"),
-    "velrune-docviewer-device": ("docviewer", "https://gitlab.com/velrune/applications/docviewer.git", "docviewer"),
-    "velrune-gallery-device": ("gallery", "https://gitlab.com/velrune/applications/gallery.git", "gallery"),
-    "velrune-email-device": ("email", "https://gitlab.com/velrune/applications/email.git", "email"),
-    "velrune-files-device": ("files", "https://gitlab.com/velrune/applications/files-app.git", "files"),
-    "velrune-contacts-device": ("contacts", "https://gitlab.com/velrune/applications/contacts.git", "contacts"),
-    "velrune-messages-device": ("messages", "https://gitlab.com/velrune/applications/messages.git", "messages"),
-    "velrune-notes-device": ("notes", "https://gitlab.com/velrune/applications/notes.git", "notes"),
-    "velrune-calendar-device": ("calendar", "https://gitlab.com/velrune/applications/calendar.git", "calendar"),
-    "velrune-clock-device": ("clock", "https://gitlab.com/velrune/applications/clock.git", "clock"),
-    "velrune-reminders-device": ("reminders", "https://gitlab.com/velrune/applications/reminders.git", "reminders"),
-    "velrune-settings-device": ("settings", "https://gitlab.com/velrune/applications/settings.git", "settings"),
-    "velrune-calculator-device": ("calculator", "https://gitlab.com/velrune/applications/calculator.git", "calculator"),
-    "velrune-camera-device": ("camera", "https://gitlab.com/velrune/applications/camera.git", "camera"),
-    "velrune-consent": ("consent", "https://gitlab.com/velrune/core.git", "core"),
+    "velrune-chat": ("chat", "https://github.com/URunDEAD-Labs/velrune-chat.git", "chat"),
+    "velrune-phone-app": ("phone", "https://github.com/URunDEAD-Labs/velrune-phone.git", "phone"),
+    "velrune-docviewer-device": ("docviewer", "https://github.com/URunDEAD-Labs/velrune-docviewer.git", "docviewer"),
+    "velrune-gallery-device": ("gallery", "https://github.com/URunDEAD-Labs/velrune-gallery.git", "gallery"),
+    "velrune-email-device": ("email", "https://github.com/URunDEAD-Labs/velrune-email.git", "email"),
+    "velrune-files-device": ("files", "https://github.com/URunDEAD-Labs/velrune-files.git", "files"),
+    "velrune-contacts-device": ("contacts", "https://github.com/URunDEAD-Labs/velrune-contacts.git", "contacts"),
+    "velrune-messages-device": ("messages", "https://github.com/URunDEAD-Labs/velrune-messages.git", "messages"),
+    "velrune-notes-device": ("notes", "https://github.com/URunDEAD-Labs/velrune-notes.git", "notes"),
+    "velrune-calendar-device": ("calendar", "https://github.com/URunDEAD-Labs/velrune-calendar.git", "calendar"),
+    "velrune-clock-device": ("clock", "https://github.com/URunDEAD-Labs/velrune-clock.git", "clock"),
+    "velrune-reminders-device": ("reminders", "https://github.com/URunDEAD-Labs/velrune-reminders.git", "reminders"),
+    "velrune-settings-device": ("settings", "https://github.com/URunDEAD-Labs/velrune-settings.git", "settings"),
+    "velrune-calculator-device": ("calculator", "https://github.com/URunDEAD-Labs/velrune-calculator.git", "calculator"),
+    "velrune-camera-device": ("camera", "https://github.com/URunDEAD-Labs/velrune-camera.git", "camera"),
+    "velrune-consent": ("consent", "https://github.com/URunDEAD-Labs/velrune-core.git", "core"),
     # The Shell's recipe takes { snapshots, shell, nixpkgs } instead (see velrune-apps.nix).
-    "velrune-shell-direct": ("shell", "https://gitlab.com/velrune/shell.git", "shell"),
+    "velrune-shell-direct": ("shell", "https://github.com/URunDEAD-Labs/velrune-shell.git", "shell"),
 }
 # Extra source arguments: recipe argument -> (canonical url, NAR-hash argument or None)
 EXTRAS = {
-    "docviewer": ("https://gitlab.com/velrune/applications/docviewer.git", "docviewerNarHash"),
-    "hardware": ("https://gitlab.com/urundead-labs/linux-handsets/fairphone6.git", "hardwareNarHash"),
+    "docviewer": ("https://github.com/URunDEAD-Labs/velrune-docviewer.git", "docviewerNarHash"),
+    "hardware": ("https://github.com/URunDEAD/linux-fairphone6.git", "hardwareNarHash"),
 }
 RECIPES = ["ci/cross-device.nix", "ci/cross-phone-app.nix", "ci/cross-phone.nix"]
 
@@ -120,6 +122,10 @@ def main():
         mirrors = json.loads(run("nix-instantiate", "--eval", "--strict", "--json", sys.argv[1]))
     else:
         mirrors = json.load(open(sys.argv[1]))
+    # Cargo.lock names -> fetch URL (source-hosts.nix), for the gitSources' mirrors.
+    hosts = json.loads(run("nix-instantiate", "--eval", "--strict", "--json",
+                           os.path.join(os.path.dirname(os.path.abspath(__file__)), "source-hosts.nix")))
+    lock_mirror = lambda u: mirrors[hosts.get(u, u)]
     entries = []
     for out in sys.argv[2:]:
         drv = run("nix-store", "-q", "--deriver", out).strip()
@@ -132,7 +138,7 @@ def main():
         recipe = next(r for r in RECIPES if os.path.exists(os.path.join(src, r)))
         lock = open(os.path.join(src, "Cargo.lock")).read()
         deps = sorted(set(re.findall(r'git\+([^"?#]+)\?[^"#]*#([0-9a-f]{40})', lock)))
-        git = [{"url": u, "rev": r, "narHash": tree_nar_hash(mirrors[u], r)} for u, r in deps]
+        git = [{"url": u, "rev": r, "narHash": tree_nar_hash(lock_mirror(u), r)} for u, r in deps]
         # Extra source arguments: the recipe's own NAR-hash argument names the content.
         recipe_text = open(os.path.join(src, recipe)).read()
         # The recipe's argument set: the first "{ ... }:" at the start of a line.
@@ -165,7 +171,7 @@ def main():
             if os.path.exists(xlock):
                 for u, r in sorted(set(re.findall(r'git\+([^"?#]+)\?[^"#]*#([0-9a-f]{40})', open(xlock).read()))):
                     if not any(g["url"] == u and g["rev"] == r for g in git):
-                        git.append({"url": u, "rev": r, "narHash": tree_nar_hash(mirrors[u], r)})
+                        git.append({"url": u, "rev": r, "narHash": tree_nar_hash(lock_mirror(u), r)})
         closure = run("nix-store", "-qR", drv).split()
         if key == "shell":
             # Its own nixpkgs pin (ci/flake.lock); velrune-apps.nix reads it from the source.

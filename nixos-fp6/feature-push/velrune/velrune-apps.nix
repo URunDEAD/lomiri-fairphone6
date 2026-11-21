@@ -6,15 +6,27 @@
 # in apps.nix (the build that is on the phone); a mismatch stops evaluation, so a pin can
 # never silently produce a different app.
 #
-# mirrors: { "<canonical git url>" = "/local/clone"; }. A mirror is used when its folder
-# exists (this desktop's clones hold every pinned commit); otherwise the canonical URL
-# is fetched, which for the private gitlab.com repositories needs credentials in git's
-# own configuration. The content is the same either way: the NAR hash decides.
+# Sources are fetched from GitHub (URunDEAD-Labs; the hardware repository from URunDEAD):
+# source-hosts.nix maps the old gitlab.com names, which the pinned Cargo.lock files and so
+# gitSources still use, to their GitHub location. Nothing is fetched from gitlab.com
+# (archived 2026-11-19): a gitlab.com URL without an entry stops evaluation.
+# mirrors: { "<fetch url>" = "/local/clone"; }. A mirror is used when its folder exists
+# (this desktop's clones hold every pinned commit); otherwise the GitHub URL is fetched,
+# which for the private URunDEAD-Labs repositories needs read access in git's own
+# configuration (gh's credential helper). The content is the same either way: the NAR
+# hash decides.
 # checkOutputs = false skips the output-path check (to inspect a mismatch).
-{ data ? import ./apps.nix, mirrors ? import ./git-mirrors.nix, checkOutputs ? true }:
+{ data ? import ./apps.nix, mirrors ? import ./git-mirrors.nix, hosts ? import ./source-hosts.nix
+, checkOutputs ? true }:
 let
+  location = url:
+    let at = hosts.${url} or url; in
+    if builtins.match "https://gitlab[.]com/.*" at != null
+    then throw "velrune-apps.nix: ${url} is on the archived gitlab.com and has no GitHub location in source-hosts.nix"
+    else at;
   mirror = url:
-    if mirrors ? ${url} && builtins.pathExists mirrors.${url} then "file://${mirrors.${url}}" else url;
+    let at = location url; in
+    if mirrors ? ${at} && builtins.pathExists mirrors.${at} then "file://${mirrors.${at}}" else at;
   fetch = { url, rev, narHash ? null, name ? "source", ... }:
     builtins.fetchGit ({ url = mirror url; inherit rev name; allRefs = true; }
       // (if narHash == null then { } else { inherit narHash; }));
