@@ -22,6 +22,9 @@ cat > "$work/bin/busctl" <<'S'
 case "$*" in
   *GetModems*) echo 'a(oa{sv}) 1 "/qrtrsoc_0" 0' ;;
   *GetCalls*) if [ "${CALLS:-0}" = 0 ]; then echo 'a(oa{sv}) 0'; else echo 'a(oa{sv}) 1 "/qrtrsoc_0/voicecall01" 1 "State" s "active"'; fi ;;
+  *"org.ofono.Modem GetProperties"*)
+    echo "busctl modem" >> "$LOG"
+    if [ "${OFFLINE:-no}" = yes ]; then echo 'a{sv} 2 "Powered" b true "Online" b false'; else echo 'a{sv} 2 "Powered" b true "Online" b true'; fi ;;
   *NetworkRegistration*)
     echo "busctl registration" >> "$LOG"
     n=$(( $(cat "$WORK/reg-tries" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$WORK/reg-tries"
@@ -102,5 +105,13 @@ expect "second imsd failure within 15 min: escalates to oFono" "systemctl restar
 
 fresh; run imsd NOW=1000; run imsd NOW=2000
 expect "imsd failures 16 min apart: no escalation" "restart ofono.service" 0
+
+fresh; run pdn OFFLINE=yes NOW=1000
+expect "modem offline (flight mode): oFono is not restarted" "restart ofono.service" 0
+expect "modem offline: nothing is stopped or started" "systemctl \(stop\|start\)" 0
+expect "modem offline: no retry is scheduled" "systemd-run" 0
+expect "modem offline: logged" "logger.*flight mode" 1
+fresh; run imsd OFFLINE=yes NOW=1000
+expect "modem offline, imsd trigger: the PDN is not restarted" "systemctl start fp6-ims-pdn.service" 0
 
 if [ "$fails" = 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi

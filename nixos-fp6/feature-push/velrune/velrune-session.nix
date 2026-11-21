@@ -149,7 +149,8 @@ in
   # battery charge limit (decision 0118) and monochrome emoji (0119). Its own session
   # (programs.velrune.session.enable) stays off: velrune-session.service below is the
   # FP6's session.
-  imports = [ ./velrune-network-plugins.nix "${pinned.system}/nix/modules/session.nix" ];
+  # ./ims-online/module.nix: VoLTE follows the modem's Online state (flight mode, rev5n).
+  imports = [ ./velrune-network-plugins.nix "${pinned.system}/nix/modules/session.nix" ./ims-online/module.nix ];
 
   options.velrune.session = {
     user = lib.mkOption {
@@ -633,6 +634,8 @@ in
     };
   };
   systemd.tmpfiles.settings."40-fp6-ims-recover"."/run/fp6-ims-recover".d = { user = "root"; group = "root"; mode = "0700"; };
+
+  # ---- VoLTE after flight mode (rev5n): ./ims-online/module.nix (imported above) ----
   # Without it imsd looks up seat0's session for call audio.
   systemd.services.imsd.environment.AUDIO_USER = user;
   security.polkit.extraConfig = ''
@@ -669,7 +672,8 @@ in
   #  * systemd.sleep AllowSuspend/Hibernation/Hybrid/SuspendThenHibernate = "no"
   #    (fp6SuspendPolicy mode "guarded"), logind IdleAction "ignore", Suspend/Hibernate
   #    keys and the short power key "ignore", CanSuspend "na";
-  #  * Wi-Fi powersave off (forced below), no rfkill/airplane unit or udev rule;
+  #  * Wi-Fi powersave off (forced below), no rfkill/airplane unit or udev rule (flight
+  #    mode is oFono Modem.Online, which ./ims-online follows for VoLTE);
   #  * the Shell's screen off is a DRM blank in the compositor, and its system_sleep
   #    module only takes a logind delay inhibitor for PrepareForSleep; it never calls
   #    Suspend;

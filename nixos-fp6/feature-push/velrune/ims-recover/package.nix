@@ -3,7 +3,7 @@
 { lib, stdenvNoCC, bash, makeWrapper, systemd, util-linux, gnugrep, coreutils }:
 stdenvNoCC.mkDerivation {
   pname = "fp6-ims-recover";
-  version = "0.1.0";
+  version = "0.1.1";
   src = lib.fileset.toSource {
     root = ./.;
     fileset = lib.fileset.unions [ ./fp6-ims-recover.sh ./test-ims-recover.sh ];

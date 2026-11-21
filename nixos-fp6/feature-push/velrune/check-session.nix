@@ -33,6 +33,22 @@ let
       && config.systemd.services.velrune-session.restartIfChanged == false;
     modemUnitsNotRestarted = lib.all (u: config.systemd.services.${u}.restartIfChanged == false)
       [ "ofono" "fp6-ims-pdn" "imsd" "msm-modem-uim-selection" "fp6-ofono-online" "fp6-ofono-data-on" "rmtfs" ];
+    # VoLTE after flight mode (rev5n): the watcher runs at boot, the recovery only on its
+    # request (never from activation or a target), and neither names the UIM selection.
+    imsOnline =
+      let
+        watch = config.systemd.services.fp6-ims-online-watch;
+        recover = config.systemd.services.fp6-ims-online-recover;
+      in {
+        watcherAtBoot = builtins.elem "multi-user.target" watch.wantedBy
+          && lib.hasSuffix "/bin/fp6-ims-online watch" watch.serviceConfig.ExecStart
+          && watch.serviceConfig.Restart == "always";
+        recoverOnDemand = recover.wantedBy == [ ] && recover.requiredBy == [ ]
+          && recover.restartIfChanged == false
+          && lib.hasSuffix "/bin/fp6-ims-online recover" recover.serviceConfig.ExecStart
+          && recover.startLimitBurst == 12;
+        uimUntouched = !(lib.hasInfix "msm-modem-uim" (builtins.toJSON [ watch.serviceConfig recover.serviceConfig ]));
+      };
   };
   ok = facts.shell.inSession && facts.shell.version == "0.1.193"
     && facts.settings.systemTrust && lib.versionAtLeast facts.settings.version "0.1.21"
@@ -40,6 +56,7 @@ let
     && facts.monochromeEmoji.font && facts.monochromeEmoji.firstEmojiFamily == "Noto Emoji"
     && lib.hasPrefix "/nix/store/" facts.applicationMap
     && lib.hasSuffix "/packaging/applications.json" facts.applicationMap
-    && facts.velruneSessionStillTheFp6Unit && facts.modemUnitsNotRestarted;
+    && facts.velruneSessionStillTheFp6Unit && facts.modemUnitsNotRestarted
+    && facts.imsOnline.watcherAtBoot && facts.imsOnline.recoverOnDemand && facts.imsOnline.uimUntouched;
 in
 if ok then facts else throw "check-session.nix: ${builtins.toJSON facts}"

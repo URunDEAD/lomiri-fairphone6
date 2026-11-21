@@ -15,6 +15,9 @@
 # oFono restart; earlier StartNetwork fails internal/211, then cm/1110), then start the
 # PDN with backoff (PDN_BACKOFF, about 5 min in all), then imsd.
 #
+# Never in flight mode: with the modem offline (oFono Modem.Online false) nothing is done,
+# because restarting oFono would bring the modem online (fp6-ofono-online) and undo it;
+# fp6-ims-online brings VoLTE back when the modem is online again.
 # Never while VoLTE works or a call is up: nothing is done when imsd is active, and oFono
 # is not restarted while it lists a voice call. oFono at most once per OFONO_MIN_INTERVAL;
 # when that or a call holds an escalation back, a retry is scheduled (transient timer)
@@ -60,6 +63,13 @@ calls_up() {
     *) return 0 ;;
   esac
 }
+offline() { # the modem says Online false (flight mode)
+  local m props
+  m=$(modem)
+  [ -n "$m" ] || return 1
+  props=$(busctl --system call org.ofono "$m" org.ofono.Modem GetProperties 2>/dev/null) || return 1
+  printf '%s' "$props" | grep -q '"Online" b false'
+}
 registered() {
   local m props
   m=$(modem)
@@ -84,6 +94,11 @@ start_pdn_with_backoff() {
 
 if systemctl is-active --quiet imsd.service; then
   log "imsd is active ($trigger triggered): nothing to recover"
+  exit 0
+fi
+
+if offline; then
+  log "the modem is offline (flight mode; $trigger triggered): nothing to recover, fp6-ims-online restarts VoLTE when it is back online"
   exit 0
 fi
 
