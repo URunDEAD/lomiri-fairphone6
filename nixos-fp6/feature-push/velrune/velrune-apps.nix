@@ -6,6 +6,12 @@
 # in apps.nix (the build that is on the phone); a mismatch stops evaluation, so a pin can
 # never silently produce a different app.
 #
+# release-pins.nix: components taken from the signed CI channel instead (Shell, Settings).
+# Each is its recipe called the way velrune-release's entry.nix calls it (native
+# aarch64-linux, `native = true`), so it evaluates to the very store path the channel
+# names and the release cache holds; the same output-path check applies. Such an entry
+# replaces apps.nix's entry of the same name.
+#
 # Sources are fetched from GitHub (URunDEAD-Labs; the hardware repository from URunDEAD):
 # source-hosts.nix maps the old gitlab.com names, which the pinned Cargo.lock files and so
 # gitSources still use, to their GitHub location. Nothing is fetched from gitlab.com
@@ -16,8 +22,8 @@
 # configuration (gh's credential helper). The content is the same either way: the NAR
 # hash decides.
 # checkOutputs = false skips the output-path check (to inspect a mismatch).
-{ data ? import ./apps.nix, mirrors ? import ./git-mirrors.nix, hosts ? import ./source-hosts.nix
-, checkOutputs ? true }:
+{ data ? import ./apps.nix, release ? import ./release-pins.nix, mirrors ? import ./git-mirrors.nix
+, hosts ? import ./source-hosts.nix, systemPin ? import ./system-pin.nix, checkOutputs ? true }:
 let
   location = url:
     let at = hosts.${url} or url; in
@@ -82,6 +88,24 @@ let
     in
     check name spec (import (src + "/${spec.recipe}") args);
 
+  # A CI release: velrune-release's entry.nix call. Its own source is `nix flake prefetch`'s
+  # snapshot (named "source"), passed as a path value (`--arg self (/. + "/nix/store/…")`),
+  # which Nix copies into the store once more (as <hash>-source) where the recipe uses it;
+  # the same is done here, or the derivation would differ from the released one.
+  releaseNixpkgs = builtins.fetchTree ({ type = "github"; } // release.nixpkgs);
+  released = name: spec:
+    let
+      snapshot = fetch (spec.src // { name = "source"; });
+      self = /. + builtins.unsafeDiscardStringContext "${snapshot}";
+    in
+    check name spec (import (snapshot + "/${spec.recipe}") {
+      nixpkgsSource = releaseNixpkgs;
+      ${spec.arg} = self;
+      gitSources = withPaths spec.gitSources;
+      native = true;
+    });
+  releasedApps = builtins.mapAttrs released (release.apps or { });
+
   # The Shell's recipe: { snapshots, shell, nixpkgs } (nixpkgs defaults to its ci/flake.lock).
   shell = spec:
     let
@@ -94,8 +118,16 @@ let
     });
 in
 {
-  apps = builtins.mapAttrs app data.apps;
+  apps = builtins.mapAttrs app (removeAttrs data.apps (builtins.attrNames releasedApps)) // releasedApps;
   # Each app's pinned source tree, for parts other than the app itself (Messages' oFono plugin).
-  sources = builtins.mapAttrs (_: spec: fetch spec.src) data.apps;
-  shell = shell data.shell;
+  sources = builtins.mapAttrs (_: spec: fetch spec.src) (data.apps // (release.apps or { }));
+  shell = if release ? shell then released "shell" release.shell else shell data.shell;
+  # Velrune System's source (system-pin.nix): its NixOS modules and application registry.
+  system = fetch systemPin;
+  # What each component is and where its pin comes from (check-session.nix, nix eval).
+  inventory = builtins.mapAttrs (_: spec: { out = spec.out; from = "apps.nix"; }) data.apps
+    // builtins.mapAttrs (_: spec: { inherit (spec) out version id; from = "release channel ${toString release.channel.serial}"; }) (release.apps or { })
+    // { shell = if release ? shell
+                 then { inherit (release.shell) out version id; from = "release channel ${toString release.channel.serial}"; }
+                 else { out = data.shell.out; from = "apps.nix"; }; };
 }

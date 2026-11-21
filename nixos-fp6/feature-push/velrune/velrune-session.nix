@@ -121,7 +121,9 @@ let
     exec ${config.security.pam.package}/bin/faillock --dir ${faillockDir} "$@"
   '';
 
-  applicationMap = "${home}/.local/share/velrune/applications.json";
+  # System's first-party registry (app id -> command), the one System packages; not a
+  # file in the user's home any more (System 1.0 IM-01).
+  applicationMap = cfg.applicationMap;
 
   sessionEnv = {
     SLINT_SCALE_FACTOR = "1.5";
@@ -143,13 +145,23 @@ let
 in
 {
   # velrune.network.plugins: NetworkManager VPN plugins + Settings' manifests.
-  imports = [ ./velrune-network-plugins.nix ];
+  # Velrune System's session module (system-pin.nix), for its device grants only: the
+  # battery charge limit (decision 0118) and monochrome emoji (0119). Its own session
+  # (programs.velrune.session.enable) stays off: velrune-session.service below is the
+  # FP6's session.
+  imports = [ ./velrune-network-plugins.nix "${pinned.system}/nix/modules/session.nix" ];
 
   options.velrune.session = {
     user = lib.mkOption {
       type = lib.types.str;
       default = "user";
       description = "The person's account: the session user, and the only owner of the PIN-check socket.";
+    };
+    applicationMap = lib.mkOption {
+      type = lib.types.path;
+      default = "${pinned.system}/packaging/applications.json";
+      defaultText = lib.literalExpression "Velrune System's packaging/applications.json (system-pin.nix)";
+      description = "VELRUNE_APPLICATION_MAP for the session and its apps: app id -> command.";
     };
     shell = lib.mkOption {
       type = lib.types.package;
@@ -194,6 +206,18 @@ in
 
   config = {
   system.nixos.tags = [ "velrune-session" ];
+
+  # ---- Velrune System's device grants (System 1.0 IM-01) ---------------------------
+  # chargeLimit: group velrune-power may write the battery's charge_control_{end,start}_threshold
+  # (udev, on add and change), and the user joins it, so the Shell's Power1.SetChargeLimit
+  # works. The session picks the group up at its next start (reboot, or a restart of
+  # velrune-session); the grant applies at the battery's next change event.
+  # monochromeEmoji: Noto Emoji ahead of the colour font for Slint's software renderer.
+  programs.velrune.session = {
+    inherit user;
+    chargeLimit.enable = true;
+    monochromeEmoji.enable = true;
+  };
 
   # ---- Lomiri off at boot, still startable by hand ----------------------------
   systemd.defaultUnit = lib.mkForce "multi-user.target";
