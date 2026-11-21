@@ -49,6 +49,24 @@ let
           && recover.startLimitBurst == 12;
         uimUntouched = !(lib.hasInfix "msm-modem-uim" (builtins.toJSON [ watch.serviceConfig recover.serviceConfig ]));
       };
+    # Role-based audio (rev5n): imported and off; switched on, it adds the WirePlumber
+    # fragment and the fixed-speaker user unit and leaves call audio (role Phone) alone.
+    audioRoles =
+      let
+        on = (trial.eval.extendModules { modules = [ {
+          velrune.audio.roles = { enable = lib.mkForce true; fixedSpeaker.volume = 1.0; };
+        } ]; }).config;
+        # The fragment's text from the derivation (no aarch64 build during evaluation).
+        conf = on.system.build.velrune-audio-roles-conf.text;
+      in {
+        offInThisImage = !config.velrune.audio.roles.enable
+          && !(config.systemd.user.services ? velrune-fixed-speaker);
+        whenOn = builtins.elem on.system.build.velrune-audio-roles-conf on.services.pipewire.wireplumber.configPackages
+          && on.systemd.user.services ? velrune-fixed-speaker
+          && lib.hasInfix "input.loopback.sink.role.alarm" conf
+          && lib.hasInfix "node.stream.default-media-role = \"Multimedia\"" conf
+          && !(lib.hasInfix "\"Phone\"" conf);
+      };
   };
   ok = facts.shell.inSession && facts.shell.version == "0.1.193"
     && facts.settings.systemTrust && lib.versionAtLeast facts.settings.version "0.1.21"
@@ -57,6 +75,7 @@ let
     && lib.hasPrefix "/nix/store/" facts.applicationMap
     && lib.hasSuffix "/packaging/applications.json" facts.applicationMap
     && facts.velruneSessionStillTheFp6Unit && facts.modemUnitsNotRestarted
-    && facts.imsOnline.watcherAtBoot && facts.imsOnline.recoverOnDemand && facts.imsOnline.uimUntouched;
+    && facts.imsOnline.watcherAtBoot && facts.imsOnline.recoverOnDemand && facts.imsOnline.uimUntouched
+    && facts.audioRoles.offInThisImage && facts.audioRoles.whenOn;
 in
 if ok then facts else throw "check-session.nix: ${builtins.toJSON facts}"

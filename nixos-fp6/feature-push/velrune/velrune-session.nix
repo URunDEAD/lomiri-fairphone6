@@ -150,7 +150,9 @@ in
   # (programs.velrune.session.enable) stays off: velrune-session.service below is the
   # FP6's session.
   # ./ims-online/module.nix: VoLTE follows the modem's Online state (flight mode, rev5n).
-  imports = [ ./velrune-network-plugins.nix "${pinned.system}/nix/modules/session.nix" ./ims-online/module.nix ];
+  # ./audio-roles/module.nix: role-based audio (Media, Ring and notifications, Alarm), off below.
+  imports = [ ./velrune-network-plugins.nix "${pinned.system}/nix/modules/session.nix" ./ims-online/module.nix
+    ./audio-roles/module.nix ];
 
   options.velrune.session = {
     user = lib.mkOption {
@@ -479,6 +481,17 @@ in
   # ---- Network connection-type plugins (rev5j) ---------------------------------------
   # Manifests from the pinned Settings' share/settings/network-plugins catalog.
   velrune.network.plugins = [ "wireguard" "openvpn" ];
+
+  # ---- Audio roles (rev5n, Clock RG-05): ready, off ----------------------------------
+  # ./audio-roles/module.nix puts every stream on a role sink (Media, Ring and
+  # notifications, Alarm) so an alarm plays at its own level whatever Media is. Off until
+  # the Shell's Media slider is the Multimedia role sink's volume (Shell requirement in
+  # System's "System 1.0 Acceptance", "Role-based audio"): with Shell 0.1.193 Media is still
+  # the speaker's own volume, so roles would change no level, and they would send streams
+  # the Shell moved to another output back through their role (measured, WirePlumber
+  # 0.5.15). Turn both on in the change that pins that Shell:
+  #   velrune.audio.roles = { enable = true; fixedSpeaker.volume = 1.0; };
+  velrune.audio.roles.enable = lib.mkDefault false;
 
   # ---- Audio: the Shell's output limiter (rev5j) -------------------------------------
   # Shell >= 0.1.133 runs its own `pipewire -c` filter-chain with swh-plugins'
