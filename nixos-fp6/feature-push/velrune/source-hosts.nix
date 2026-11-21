@@ -12,6 +12,7 @@
   "https://gitlab.com/velrune/applications/calendar.git" = "https://github.com/URunDEAD-Labs/velrune-calendar.git";
   "https://gitlab.com/velrune/applications/camera.git" = "https://github.com/URunDEAD-Labs/velrune-camera.git";
   "https://gitlab.com/velrune/applications/chat.git" = "https://github.com/URunDEAD-Labs/velrune-chat.git";
+  "https://gitlab.com/velrune/applications/capture.git" = "https://github.com/URunDEAD-Labs/velrune-capture.git";
   "https://gitlab.com/velrune/applications/clock.git" = "https://github.com/URunDEAD-Labs/velrune-clock.git";
   "https://gitlab.com/velrune/applications/contacts.git" = "https://github.com/URunDEAD-Labs/velrune-contacts.git";
   "https://gitlab.com/velrune/applications/docviewer.git" = "https://github.com/URunDEAD-Labs/velrune-docviewer.git";

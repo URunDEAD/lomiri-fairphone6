@@ -8,6 +8,7 @@
   "https://github.com/URunDEAD-Labs/velrune-calendar.git" = "/mnt/data2/Workspace/Velrune/applications/calendar";
   "https://github.com/URunDEAD-Labs/velrune-camera.git" = "/mnt/data2/Workspace/Velrune/applications/camera";
   "https://github.com/URunDEAD-Labs/velrune-chat.git" = "/mnt/data2/Workspace/Velrune/applications/chat";
+  "https://github.com/URunDEAD-Labs/velrune-capture.git" = "/mnt/data2/Workspace/Velrune/applications/capture";
   "https://github.com/URunDEAD-Labs/velrune-clock.git" = "/mnt/data2/Workspace/Velrune/applications/clock";
   "https://github.com/URunDEAD-Labs/velrune-contacts.git" = "/mnt/data2/Workspace/Velrune/applications/contacts";
   "https://github.com/URunDEAD-Labs/velrune-docviewer.git" = "/mnt/data2/Workspace/Velrune/applications/docviewer";

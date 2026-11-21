@@ -2,7 +2,8 @@
 """Writes velrune/release-pins.nix: components the image takes from the signed CI channel.
 
 usage: release-pins.py CHANNEL_JSON CHANNEL_MINISIG ID... > release-pins.nix
-       e.g. release-pins.py velrune.json velrune.json.minisig org.velrune.Shell org.velrune.Settings
+       e.g. release-pins.py velrune.json velrune.json.minisig org.velrune.Shell org.velrune.Settings \
+              org.velrune.Clock org.velrune.Capture
 
 The channel (http://100.71.132.112:8088/channel/velrune.json, NetBird only) names, per
 component, the commit CI built and the store path it signed into the binary cache. This
@@ -27,7 +28,10 @@ NIXPKGS = {"owner": "NixOS", "repo": "nixpkgs",
            "rev": "31ecbaca1bdefa45dffc409f0250bd8039ea0010",
            "narHash": "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM="}
 # channel id -> (key in release-pins.nix, where it goes)
-KEYS = {"org.velrune.Shell": ("shell", "shell"), "org.velrune.Settings": ("settings", "apps")}
+# Clock and Capture are System-trust apps (rev5n): the Shell honours Clock's over-lock
+# alarm window and gives Capture the screen-capture protocols only for system entries.
+KEYS = {"org.velrune.Shell": ("shell", "shell"), "org.velrune.Settings": ("settings", "apps"),
+        "org.velrune.Clock": ("clock", "apps"), "org.velrune.Capture": ("capture", "apps")}
 
 
 def run(*cmd, **kw):

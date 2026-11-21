@@ -49,6 +49,34 @@ let
           && recover.startLimitBurst == 12;
         uimUntouched = !(lib.hasInfix "msm-modem-uim" (builtins.toJSON [ watch.serviceConfig recover.serviceConfig ]));
       };
+    # System trust (rev5n): Clock (its X-Velrune-OverLock=alarm, from 0.1.20) and Capture
+    # (X-Velrune-Capture=true) count only as system entries, i.e. in the system profile.
+    # Both come from the signed channel once released (release-pins.py ... org.velrune.Clock
+    # org.velrune.Capture); until then Clock is apps.nix's and Capture is absent.
+    systemTrust =
+      let
+        app = name: if pinned.inventory ? ${name} then {
+          inherit (pinned.inventory.${name}) out from;
+          version = pinned.inventory.${name}.version or (lib.last (lib.splitString "-" pinned.inventory.${name}.out));
+          systemTrust = builtins.elem pinned.inventory.${name}.out systemPackages;
+        } else null;
+        clock = app "clock";
+        capture = app "capture";
+        # GStreamer for Capture, checked on an evaluation that has a Capture package.
+        withCapture = (trial.eval.extendModules { modules = [ ({ pkgs, ... }: {
+          velrune.session.apps = config.velrune.session.apps ++ [ (pkgs.emptyDirectory // { pname = "velrune-capture-device"; }) ];
+        }) ]; }).config;
+        gst = c: {
+          launchOnPath = builtins.elem trial.pkgs.gst_all_1.gstreamer.bin.outPath
+            (map (p: p.outPath) c.environment.systemPackages);
+          pluginPath = c.environment.sessionVariables.GST_PLUGIN_SYSTEM_PATH_1_0 or null;
+        };
+      in {
+        inherit clock capture;
+        clockOverLock = clock != null && lib.versionAtLeast clock.version "0.1.20";
+        gstreamer = gst config;
+        gstreamerWithCapture = gst withCapture;
+      };
     # Role-based audio (rev5n): imported and off; switched on, it adds the WirePlumber
     # fragment and the fixed-speaker user unit and leaves call audio (role Phone) alone.
     audioRoles =
@@ -76,6 +104,11 @@ let
     && lib.hasSuffix "/packaging/applications.json" facts.applicationMap
     && facts.velruneSessionStillTheFp6Unit && facts.modemUnitsNotRestarted
     && facts.imsOnline.watcherAtBoot && facts.imsOnline.recoverOnDemand && facts.imsOnline.uimUntouched
-    && facts.audioRoles.offInThisImage && facts.audioRoles.whenOn;
+    && facts.audioRoles.offInThisImage && facts.audioRoles.whenOn
+    && facts.systemTrust.clock.systemTrust
+    && (facts.systemTrust.capture == null || facts.systemTrust.capture.systemTrust)
+    && facts.systemTrust.gstreamerWithCapture.launchOnPath
+    && lib.hasSuffix "/lib/gstreamer-1.0" (toString facts.systemTrust.gstreamerWithCapture.pluginPath)
+    && (facts.systemTrust.capture == null) == (facts.systemTrust.gstreamer.pluginPath == null);
 in
 if ok then facts else throw "check-session.nix: ${builtins.toJSON facts}"
